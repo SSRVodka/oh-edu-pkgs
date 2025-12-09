@@ -1,0 +1,77 @@
+diff -Naur onnxruntime-1.18.2/onnxruntime/core/mlas/lib/mlasi.h onnxruntime-1.18.2.new/onnxruntime/core/mlas/lib/mlasi.h
+--- onnxruntime-1.18.2/onnxruntime/core/mlas/lib/mlasi.h	2024-08-13 04:58:40.000000000 +0800
++++ onnxruntime-1.18.2.new/onnxruntime/core/mlas/lib/mlasi.h	2024-10-09 17:59:55.404588055 +0800
+@@ -361,6 +361,7 @@
+ #else
+
+ #if defined(__aarch64__) && defined(__linux__)
++#define bfloat16_t  float32_t
+ typedef size_t(MLASCALL MLAS_SBGEMM_FLOAT_KERNEL)(
+     const float* A,
+     const bfloat16_t* B,
+diff -Naur onnxruntime-1.18.2/onnxruntime/core/mlas/lib/sbgemm_kernel_neon.cpp onnxruntime-1.18.2.new/onnxruntime/core/mlas/lib/sbgemm_kernel_neon.cpp
+--- onnxruntime-1.18.2/onnxruntime/core/mlas/lib/sbgemm_kernel_neon.cpp	2024-08-13 04:58:40.000000000 +0800
++++ onnxruntime-1.18.2.new/onnxruntime/core/mlas/lib/sbgemm_kernel_neon.cpp	2024-10-09 18:00:54.669941616 +0800
+@@ -117,8 +117,8 @@
+             bfloat16x8_t t2t3_l_4h = vcvtq_low_bf16_f32(t2_l);
+             bfloat16x8_t t2t3_l_8h = vcvtq_high_bf16_f32(t2t3_l_4h, t3_l);
+
+-            vst1q_bf16(&D[0], t0t1_l_8h);
+-            vst1q_bf16(&D[8], t2t3_l_8h);
++            vst1q_f32(&D[0], t0t1_l_8h);
++            vst1q_f32(&D[8], t2t3_l_8h);
+
+             float32x4x2_t z0_h = vzipq_f32(t0_h, t2_h);
+             float32x4x2_t z1_h = vzipq_f32(t1_h, t3_h);
+@@ -135,8 +135,8 @@
+             bfloat16x8_t t2t3_h_4h = vcvtq_low_bf16_f32(t2_h);
+             bfloat16x8_t t2t3_h_8h = vcvtq_high_bf16_f32(t2t3_h_4h, t3_h);
+
+-            vst1q_bf16(&D[16], t0t1_h_8h);
+-            vst1q_bf16(&D[24], t2t3_h_8h);
++            vst1q_f32(&D[16], t0t1_h_8h);
++            vst1q_f32(&D[24], t2t3_h_8h);
+
+             D += 32;
+             b += ldb * 4;
+@@ -198,8 +198,8 @@
+                 bfloat16x8_t t2t3_4h = vcvtq_low_bf16_f32(t2);
+                 bfloat16x8_t t2t3_8h = vcvtq_high_bf16_f32(t2t3_4h, t3);
+
+-                vst1q_bf16(&D[0], t0t1_8h);
+-                vst1q_bf16(&D[8], t2t3_8h);
++                vst1q_f32(&D[0], t0t1_8h);
++                vst1q_f32(&D[8], t2t3_8h);
+
+                 D += 16;
+                 b += 4;
+@@ -245,7 +245,7 @@
+                 bfloat16x8_t t_4h = vcvtq_low_bf16_f32(tt0);
+                 bfloat16x8_t t_8h = vcvtq_high_bf16_f32(t_4h, tt1);
+
+-                vst1q_bf16(&D[0], t_8h);
++                vst1q_f32(&D[0], t_8h);
+
+                 D += 8;
+                 b += 2;
+@@ -295,7 +295,7 @@
+                 bfloat16x8_t t_4h = vcvtq_low_bf16_f32(tt0);
+                 bfloat16x8_t t_8h = vcvtq_high_bf16_f32(t_4h, tt1);
+
+-                vst1q_bf16(&D[0], t_8h);
++                vst1q_f32(&D[0], t_8h);
+
+                 D += 8;
+                 b += 1;
+diff -Naur onnxruntime-1.18.2/onnxruntime/core/platform/posix/env.cc onnxruntime-1.18.2.new/onnxruntime/core/platform/posix/env.cc
+--- onnxruntime-1.18.2/onnxruntime/core/platform/posix/env.cc	2024-08-13 04:58:40.000000000 +0800
++++ onnxruntime-1.18.2.new/onnxruntime/core/platform/posix/env.cc	2024-10-09 17:20:42.759965085 +0800
+@@ -203,7 +203,7 @@
+   static void* ThreadMain(void* param) {
+     std::unique_ptr<Param> p(static_cast<Param*>(param));
+     ORT_TRY {
+-#if !defined(__APPLE__) && !defined(__ANDROID__) && !defined(__wasm__) && !defined(_AIX)
++#if !defined(__APPLE__) && !defined(__ANDROID__) && !defined(__wasm__) && !defined(_AIX) && !(__OHOS__)
+       if (p->affinity.has_value() && !p->affinity->empty()) {
+         cpu_set_t cpuset;
+         CPU_ZERO(&cpuset);

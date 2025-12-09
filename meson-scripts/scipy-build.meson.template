@@ -1,0 +1,60 @@
+[constants]
+py_ver = ''
+ohos_sdk = ''
+proj_root=''
+toolchain = ohos_sdk / 'native/llvm/bin'
+sysroot = ohos_sdk / 'native/sysroot'
+host_cpu = ''
+host_arch = ''
+dist_root = proj_root/'dist.' + host_cpu
+hostpy_root = proj_root/'crossenv_' + host_cpu + '/cross'
+buildpy_root = proj_root/'crossenv_' + host_cpu + '/build'
+common_flags = ['--sysroot=' + sysroot, '--target=' + host_cpu + '-linux-ohos']
+sitepkg = hostpy_root/'lib/python' + py_ver + '/site-packages'
+common_c_flags = ['-fPIC', '-D__MUSL__=1', '-I' + dist_root/'include', '-I' + dist_root/'include/python' + py_ver, '-I' + dist_root/'include/lzma', '-I' + dist_root/'include/ncursesw', '-I' + dist_root/'include/readline', '-I' + dist_root/'ssl/include', '-I' + sitepkg/'numpy/core/include']
+common_ld_flags = ['-fuse-ld=lld', '-L' + sysroot/'usr/lib/' + host_cpu + '-linux-ohos', '-L' + dist_root/'lib', '-L' + dist_root/'ssl/lib64', '-lpython' + py_ver, '-L' + sitepkg/'numpy/core/lib']
+
+[built-in options]
+c_args = common_flags + common_c_flags
+cpp_args = common_flags + common_c_flags
+c_link_args = common_flags + common_ld_flags
+cpp_link_args = common_flags + common_ld_flags
+
+[properties]
+cmake_toolchain_file = ohos_sdk / 'native/build/cmake/ohos.toolchain.cmake'
+sizeof_long_double = 8
+longdouble_format = 'IEEE_DOUBLE_LE'
+numpy-include-dir = sitepkg / 'numpy/core/include'
+pythran-include-dir = sitepkg / 'pythran'
+
+[binaries]
+c = toolchain / 'clang'
+cpp = toolchain / 'clang++'
+python = hostpy_root / 'bin/python3'
+cython = ''
+cython3 = cython
+fortran = host_cpu + '-linux-gnu-gfortran-11'
+f2py = buildpy_root / 'bin/f2py'
+pybind11-config = buildpy_root / 'bin/pybind11-config'
+as = toolchain / 'llvm-as'
+ld = toolchain / 'ld.lld'
+c_ld = ld
+cpp_ld = ld
+lld = toolchain / 'ld.lld'
+strip = toolchain / 'llvm-strip'
+ranlib = toolchain / 'llvm-ranlib'
+objdump = toolchain / 'llvm-objdump'
+objcopy = toolchain / 'llvm-objcopy'
+readelf = toolchain / 'llvm-readelf'
+nm = toolchain / 'llvm-nm'
+ar = toolchain / 'llvm-ar'
+profdata = toolchain / 'llvm-profdata'
+pkg-config = 'pkg-config'
+
+[host_machine]
+system = 'ohos'
+kernel = 'linux'
+cpu_family = host_cpu
+cpu = host_cpu
+endian = 'little'
+

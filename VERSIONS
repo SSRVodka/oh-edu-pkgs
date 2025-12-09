@@ -1,0 +1,84 @@
+# <dir> <name> <version> [...deps]
+zlib		libz		1.3.1
+libffi		libffi		3.4.8
+bzip2		bzip2		1.0.8
+xz		xz		5.8.1
+readline 	libreadline 	8.1		libncursesw>=6.0
+openssl 	openssl 	3.5.0		libz>=1.0
+sqlite		sqlite		3.49.1
+ncurses		libncursesw	6.5
+gettext		libgettext	0.24
+util-linux	util-linux	2.41.2		libncursesw>6.0,libreadline>8.0
+Python		python3		3.12.12		libz>=1.0,openssl>=3.0,libffi>3.0,sqlite>3.0,bzip2>=1.0,xz>=5.8,libncursesw>6.0,libreadline>=8.1,libgettext>=0.24,util-linux>2.0
+OpenBLAS	openblas	0.3.29
+libaacplus	libaacplus	2.0.2
+x264		x264		0.165
+alsa-lib	alsa		1.2.14
+ffmpeg		ffmpeg		4.3.9		libz>=1.0,xz>=5.0,libaacplus>=2.0,x264,libiconv>=1.15
+libiconv	libiconv	1.17
+gmp		libgmp		6.3.0
+mpfr		libmpfr		4.2.2		libgmp>=6.3
+mpc		libmpc		1.3.1		libgmp>=6.3,libmpfr>=4.0.0
+binutils	binutils	2.44
+patchelf	patchelf	0.18.0
+asio		asio		1.32.0
+acl		acl		2.3.1		attr>=2.5
+attr		attr		2.5.1
+assimp		assimp		6.0.2
+fmt		fmt		12.1.0
+yaml-cpp	yaml-cpp	0.8.0
+libpsl		libpsl		0.21.5
+curl		curl		8.16.0		openssl>3.0,libpsl>0.20
+boost		boost		1.81.0		python3==3.12.12
+eigen		eigen3		3.4.1		libgmp>=6.0,libmpfr>=4.0,boost>1.0
+qhull		qhull		8.1.0
+libccd		libccd		2.1
+SuiteSparse	SuiteSparse	7.11.0		libgmp>=6.0,libmpfr>=4.0,openblas
+gflags		gflags		2.2.2
+glog		glog		0.7.1		gflags>2.0
+gtest		gtest		1.16.0
+ceres-solver	ceres-solver	2.2.0		gflags>2.0,glog>0.5,eigen3,openblas>=0.3,SuiteSparse>7.0
+zstd		zstd		1.5.7
+zeromq		libzmq		4.3.5
+libexpat	libexpat	2.7.3
+libpng		libpng		1.6.50
+console_bridge	console_bridge	1.0.2
+octomap		liboctomap-dev	1.9.8
+freetype	freetype	2.14.1
+fontconfig	fontconfig	2.17.1		freetype>2.0,libncursesw>6.0,libreadline>8.0,icu>70.0,libexpat>2.0,libxml2>2.0,libiconv>1.0
+g2o		g2o		2024.12.28	eigen3,SuiteSparse>7.0
+geographiclib	geographiclib	2.6
+tinyxml2	tinyxml2	11.0.0
+oneTBB		oneTBB		2022.3.0
+pcre2		pcre2		10.47		bzip2>=1.0,libncursesw>6.0,libreadline>8.0
+swig		swig		4.4.0		pcre2>10.0
+YDLidar-SDK	YDLidar-SDK	1.2.7
+llama.cpp	llama.cpp	0.6910.0	openssl>3.0,curl>8.0,openblas>=0.3
+onnxruntime	onnxruntime	1.18.2		python3>3.10
+opencv		python3-opencv	4.11.0		python3>3.10,ffmpeg>4.0,openblas>=0.3
+rsync		rsync		3.4.1		openssl>3.0,zstd>=1.5
+nasm		nasm		3.01
+grpc		grpc		1.73.0		libz>=1.0,openssl>3.0
+icu		icu		78.1
+libxml2		libxml2		2.15.1		libiconv>=1.15,icu>=78.0,libncursesw>6.0,libreadline>8.0
+lz4		lz4		1.10.0
+llvm		llvm		21.1.4
+libdrm		libdrm		2.4.127
+SPIRV-Headers	SPIRV-Headers	1.4.328
+SPIRV-Tools	SPIRV-Tools	1.4.328		SPIRV-Headers==1.4.328
+SPIRV-LLVM-Translator	SPIRV-LLVM-Translator	21.1.1	SPIRV-Headers>=1.4,SPIRV-Tools>=1.4,llvm>20.0
+glslang		glslang		16.0.0		SPIRV-LLVM-Translator>=21.0
+xorg		xorg		7.0		fontconfig>=2.17
+mesa		mesa		25.2.2		xorg>=7.0,libdrm>2.0,glslang>=16.0,llvm>20.0,SPIRV-LLVM-Translator>=21.0,zstd>=1.0
+glu		glu		9.0.3		mesa>=25.0
+ogre		ogre		14.4.1		mesa>=25.0,xorg,freetype>2.0
+flann		flann		1.9.2		lz4>1.0
+pcl		pcl		1.15.1		mesa>=25.0,boost>=1.80,eigen3,libpng,qhull>8.0,flann>1.0
+bullet3		bullet3		3.25		glu>=9.0,mesa>=25.0,xorg,python3>3.6
+qt5		qt5		5.15.12
+GraphicsMagick	GraphicsMagick	1.3.45		bzip2>=1.0,icu>=78.0,freetype>2.0,libpng>1.0,xz>=5.0,libxml2>=2.0,libz>1.0,zstd>1.0
+xtl		xtl		0.7.7
+xtensor		xtensor		0.25.0		xtl>=0.7
+xsimd		xsimd		13.2.0		xtl>=0.7
+nanoflann	nanoflann	1.8.0
+nlohmann-json	nlohmann-json	3.12.0

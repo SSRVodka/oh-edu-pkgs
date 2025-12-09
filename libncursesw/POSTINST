@@ -1,0 +1,16 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+_prefix=${1:-}
+if [ -z "$_prefix" ]; then
+    echo "ERROR: empty prefix in 1st parameter"
+    exit 1
+fi
+
+# feel free to use $_prefix here
+sed -i -e "s|^prefix=.*|prefix=${_prefix}|g" \
+	-e "s|^\(libdir=\"\).*\(/lib/.*\)$|\1${_prefix}\2|g" \
+	-e "s|echo \"\(.*\)/share/terminfo\"|echo \"${_prefix}/share/terminfo\"|g" \
+	${_prefix}/bin/ncursesw6-config
+echo "Patched bin/ncursesw6-config"
+

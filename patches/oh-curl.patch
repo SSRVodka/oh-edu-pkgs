@@ -1,0 +1,14 @@
+--- curl/lib/curl_setup.h	2025-10-31 17:59:52.799022920 +0800
++++ curl/lib/curl_setup.h.oh	2025-10-31 18:00:03.771272428 +0800
+@@ -223,6 +223,11 @@
+ #  include <pthread.h>
+ #endif
+ 
++#if defined(__OPENHARMONY__)
++// OpenHarmony doesn't support standard POSIX pthread_cancel
++#undef PTHREAD_CANCEL_ENABLE
++#endif
++
+ /*
+  * Disable other protocols when http is the only one desired.
+  */

@@ -1,0 +1,100 @@
+diff --git a/cmake/deps.txt b/cmake/deps.txt
+index 62adbf53e2..e2c3c623db 100644
+--- a/cmake/deps.txt
++++ b/cmake/deps.txt
+@@ -22,7 +22,7 @@ dlpack;https://github.com/dmlc/dlpack/archive/refs/tags/v0.6.zip;4d565dd2e5b3132
+ # it contains changes on top of 3.4.0 which are required to fix build issues.
+ # Until the 3.4.1 release this is the best option we have.
+ # Issue link: https://gitlab.com/libeigen/eigen/-/issues/2744
+-eigen;https://gitlab.com/libeigen/eigen/-/archive/e7248b26a1ed53fa030c5c459f7ea095dfd276ac/eigen-e7248b26a1ed53fa030c5c459f7ea095dfd276ac.zip;be8be39fdbc6e60e94fa7870b280707069b5b81a
++eigen;https://gitlab.com/libeigen/eigen/-/archive/e7248b26a1ed53fa030c5c459f7ea095dfd276ac/eigen-e7248b26a1ed53fa030c5c459f7ea095dfd276ac.zip;32b145f525a8308d7ab1c09388b2e288312d8eba
+ flatbuffers;https://github.com/google/flatbuffers/archive/refs/tags/v23.5.26.zip;59422c3b5e573dd192fead2834d25951f1c1670c
+ fp16;https://github.com/Maratyszcza/FP16/archive/0a92994d729ff76a58f692d3028ca1b64b145d91.zip;b985f6985a05a1c03ff1bb71190f66d8f98a1494
+ fxdiv;https://github.com/Maratyszcza/FXdiv/archive/63058eff77e11aa15bf531df5dd34395ec3017c8.zip;a5658f4036402dbca7cebee32be57fb8149811e1
+@@ -57,4 +57,4 @@ cutlass;https://github.com/NVIDIA/cutlass/archive/refs/tags/v3.1.0.zip;757f90a79
+ utf8_range;https://github.com/protocolbuffers/utf8_range/archive/72c943dea2b9240cd09efde15191e144bc7c7d38.zip;9925739c9debc0efa2adcb194d371a35b6a03156
+ extensions;https://github.com/microsoft/onnxruntime-extensions/archive/94142d8391c9791ec71c38336436319a2d4ac7a0.zip;4365ac5140338b4cb75a39944a4be276e3829b3c
+ composable_kernel;https://github.com/ROCmSoftwarePlatform/composable_kernel/archive/5356c4a943a35e74d7cdc69486afcb8703b9a59a.zip;522382c2af437e09124287e5879ab64af5b2e299
+-directx_headers;https://github.com/microsoft/DirectX-Headers/archive/refs/tags/v1.613.1.zip;47653509a3371eabb156360f42faf582f314bf2e
+\ No newline at end of file
++directx_headers;https://github.com/microsoft/DirectX-Headers/archive/refs/tags/v1.613.1.zip;47653509a3371eabb156360f42faf582f314bf2e
+diff --git a/onnxruntime/core/mlas/lib/mlasi.h b/onnxruntime/core/mlas/lib/mlasi.h
+index 04da9ab4fd..59cb5b07e4 100644
+--- a/onnxruntime/core/mlas/lib/mlasi.h
++++ b/onnxruntime/core/mlas/lib/mlasi.h
+@@ -361,6 +361,7 @@ size_t
+ #else
+ 
+ #if defined(__aarch64__) && defined(__linux__)
++#define bfloat16_t  float32_t
+ typedef size_t(MLASCALL MLAS_SBGEMM_FLOAT_KERNEL)(
+     const float* A,
+     const bfloat16_t* B,
+diff --git a/onnxruntime/core/mlas/lib/sbgemm_kernel_neon.cpp b/onnxruntime/core/mlas/lib/sbgemm_kernel_neon.cpp
+index a6a73996c5..d2f51f9509 100644
+--- a/onnxruntime/core/mlas/lib/sbgemm_kernel_neon.cpp
++++ b/onnxruntime/core/mlas/lib/sbgemm_kernel_neon.cpp
+@@ -117,8 +117,8 @@ MlasSBGemmConvertCopyPackB(bfloat16_t* D, const float* B, size_t ldb, size_t Cou
+             bfloat16x8_t t2t3_l_4h = vcvtq_low_bf16_f32(t2_l);
+             bfloat16x8_t t2t3_l_8h = vcvtq_high_bf16_f32(t2t3_l_4h, t3_l);
+ 
+-            vst1q_bf16(&D[0], t0t1_l_8h);
+-            vst1q_bf16(&D[8], t2t3_l_8h);
++            vst1q_f32(&D[0], t0t1_l_8h);
++            vst1q_f32(&D[8], t2t3_l_8h);
+ 
+             float32x4x2_t z0_h = vzipq_f32(t0_h, t2_h);
+             float32x4x2_t z1_h = vzipq_f32(t1_h, t3_h);
+@@ -135,8 +135,8 @@ MlasSBGemmConvertCopyPackB(bfloat16_t* D, const float* B, size_t ldb, size_t Cou
+             bfloat16x8_t t2t3_h_4h = vcvtq_low_bf16_f32(t2_h);
+             bfloat16x8_t t2t3_h_8h = vcvtq_high_bf16_f32(t2t3_h_4h, t3_h);
+ 
+-            vst1q_bf16(&D[16], t0t1_h_8h);
+-            vst1q_bf16(&D[24], t2t3_h_8h);
++            vst1q_f32(&D[16], t0t1_h_8h);
++            vst1q_f32(&D[24], t2t3_h_8h);
+ 
+             D += 32;
+             b += ldb * 4;
+@@ -198,8 +198,8 @@ MlasSBGemmConvertCopyPackB(bfloat16_t* D, const float* B, size_t ldb, size_t Cou
+                 bfloat16x8_t t2t3_4h = vcvtq_low_bf16_f32(t2);
+                 bfloat16x8_t t2t3_8h = vcvtq_high_bf16_f32(t2t3_4h, t3);
+ 
+-                vst1q_bf16(&D[0], t0t1_8h);
+-                vst1q_bf16(&D[8], t2t3_8h);
++                vst1q_f32(&D[0], t0t1_8h);
++                vst1q_f32(&D[8], t2t3_8h);
+ 
+                 D += 16;
+                 b += 4;
+@@ -245,7 +245,7 @@ MlasSBGemmConvertCopyPackB(bfloat16_t* D, const float* B, size_t ldb, size_t Cou
+                 bfloat16x8_t t_4h = vcvtq_low_bf16_f32(tt0);
+                 bfloat16x8_t t_8h = vcvtq_high_bf16_f32(t_4h, tt1);
+ 
+-                vst1q_bf16(&D[0], t_8h);
++                vst1q_f32(&D[0], t_8h);
+ 
+                 D += 8;
+                 b += 2;
+@@ -295,7 +295,7 @@ MlasSBGemmConvertCopyPackB(bfloat16_t* D, const float* B, size_t ldb, size_t Cou
+                 bfloat16x8_t t_4h = vcvtq_low_bf16_f32(tt0);
+                 bfloat16x8_t t_8h = vcvtq_high_bf16_f32(t_4h, tt1);
+ 
+-                vst1q_bf16(&D[0], t_8h);
++                vst1q_f32(&D[0], t_8h);
+ 
+                 D += 8;
+                 b += 1;
+diff --git a/onnxruntime/core/platform/posix/env.cc b/onnxruntime/core/platform/posix/env.cc
+index 9999550c24..f7d7b7cf0d 100644
+--- a/onnxruntime/core/platform/posix/env.cc
++++ b/onnxruntime/core/platform/posix/env.cc
+@@ -203,7 +203,7 @@ class PosixThread : public EnvThread {
+   static void* ThreadMain(void* param) {
+     std::unique_ptr<Param> p(static_cast<Param*>(param));
+     ORT_TRY {
+-#if !defined(__APPLE__) && !defined(__ANDROID__) && !defined(__wasm__) && !defined(_AIX)
++#if !defined(__APPLE__) && !defined(__ANDROID__) && !defined(__wasm__) && !defined(_AIX) && !(__OHOS__)
+       if (p->affinity.has_value() && !p->affinity->empty()) {
+         cpu_set_t cpuset;
+         CPU_ZERO(&cpuset);

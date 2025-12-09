@@ -1,0 +1,94 @@
+diff --git a/include/grpc/support/port_platform.h b/include/grpc/support/port_platform.h
+index 04a90fbf8a..0bdf9016b6 100644
+--- a/include/grpc/support/port_platform.h
++++ b/include/grpc/support/port_platform.h
+@@ -203,6 +203,51 @@
+ #endif /* __has_include(<android/ndk-version.h>) */
+ #endif /* defined(__has_include) */
+ #include <linux/version.h>
++#elif defined(__OPENHARMONY__)
++#define GPR_PLATFORM_STRING "openharmony"
++#ifndef _BSD_SOURCE
++#define _BSD_SOURCE
++#endif
++#ifndef _DEFAULT_SOURCE
++#define _DEFAULT_SOURCE
++#endif
++#ifndef _GNU_SOURCE
++#define _GNU_SOURCE
++#endif
++#include <features.h>
++#define GPR_CPU_LINUX 1
++#define GPR_GCC_ATOMIC 1
++#define GPR_LINUX 1
++#define GPR_LINUX_LOG
++#define GPR_SUPPORT_CHANNELS_FROM_FD 1
++#define GPR_LINUX_ENV 1
++#define GPR_POSIX_TMPFILE 1
++#define GPR_POSIX_STAT 1
++#define GPR_POSIX_STRING 1
++#define GPR_POSIX_SUBPROCESS 1
++#define GPR_POSIX_SYNC 1
++#define GPR_POSIX_TIME 1
++#define GPR_HAS_PTHREAD_H 1
++#define GPR_GETPID_IN_UNISTD_H 1
++#ifdef _LP64
++#define GPR_ARCH_64 1
++#else /* _LP64 */
++#define GPR_ARCH_32 1
++#endif /* _LP64 */
++// #ifdef __GLIBC__
++// # define GPR_POSIX_CRASH_HANDLER 1
++// # ifdef __GLIBC_PREREQ
++// #   if __GLIBC_PREREQ(2, 12)
++// #     define GPR_LINUX_PTHREAD_NAME 1
++// #   endif
++// # else
++// // musl libc & others
++// #   define GPR_LINUX_PTHREAD_NAME 1
++// # endif
++// # include <linux/version.h>
++// #else /* musl libc */
++# define GPR_MUSL_LIBC_COMPAT 1
++// #endif
+ #elif defined(__linux__)
+ #define GPR_PLATFORM_STRING "linux"
+ #ifndef _BSD_SOURCE
+diff --git a/setup.py b/setup.py
+index 39ca17e824..85cb3e04a8 100644
+--- a/setup.py
++++ b/setup.py
+@@ -318,7 +318,7 @@ if BUILD_WITH_SYSTEM_OPENSSL:
+         lambda x: "third_party/boringssl" not in x, CORE_C_FILES
+     )
+     CORE_C_FILES = filter(lambda x: "src/boringssl" not in x, CORE_C_FILES)
+-    SSL_INCLUDE = (os.path.join("/usr", "include", "openssl"),)
++#    SSL_INCLUDE = (os.path.join("/usr", "include", "openssl"),
+ 
+ if BUILD_WITH_SYSTEM_ZLIB:
+     CORE_C_FILES = filter(lambda x: "third_party/zlib" not in x, CORE_C_FILES)
+diff --git a/src/core/util/posix/thd.cc b/src/core/util/posix/thd.cc
+index 764882dd67..abada16da9 100644
+--- a/src/core/util/posix/thd.cc
++++ b/src/core/util/posix/thd.cc
+@@ -199,7 +199,7 @@ void Thread::Signal(gpr_thd_id tid, int sig) {
+   }
+ }
+ 
+-#ifndef GPR_ANDROID
++#if !defined(GPR_ANDROID) && !defined(__OPENHARMONY__)
+ void Thread::Kill(gpr_thd_id tid) {
+   auto cancel_err = pthread_cancel((pthread_t)tid);
+   if (cancel_err != 0) {
+@@ -207,9 +207,9 @@ void Thread::Kill(gpr_thd_id tid) {
+                << " failed: " << StrError(cancel_err);
+   }
+ }
+-#else  // GPR_ANDROID
++#else  // GPR_ANDROID || __OPENHARMONY__
+ void Thread::Kill(gpr_thd_id /* tid */) {
+-  VLOG(2) << "Thread::Kill is not supported on Android.";
++  VLOG(2) << "Thread::Kill is not supported on Android or OpenHarmony.";
+ }
+ #endif
+ 

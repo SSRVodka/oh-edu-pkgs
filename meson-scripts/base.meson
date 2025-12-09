@@ -1,0 +1,67 @@
+[constants]
+py_ver = '3.12'
+ohos_sdk = '/home/xhw/Desktop/OH/oh-cross-toolchain/ohos-sdk/15'
+proj_root = '/home/xhw/Desktop/OH/oh-edu-python'
+toolchain = ohos_sdk / 'native/llvm/bin'
+sysroot = ohos_sdk / 'native/sysroot'
+host_cpu = 'aarch64'
+host_arch = 'arm64-v8a'
+dist_root = proj_root/'dist.' + host_cpu
+hostpy_root = proj_root/'crossenv_' + host_cpu + '/cross'
+common_flags = ['--sysroot=' + sysroot, '--target=' + host_cpu + '-linux-ohos']
+common_c_flags = [ '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.xz/include/lzma', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.libncursesw/include/ncursesw', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.libreadline/include/readline', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.util-linux/include/uuid', '-I/home/xhw/Desktop/OH/oh-edu-python/crossenv_aarch64/cross/lib/python3.12/site-packages/numpy/core/include', '-I/home/xhw/Desktop/OH/oh-edu-python/crossenv_aarch64/cross/lib/python3.12/site-packages/numpy/_core/include', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.python3/include', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.util-linux/include', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.libgettext/include', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.libreadline/include', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.libncursesw/include', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.xz/include', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.bzip2/include', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.sqlite/include', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.libffi/include', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.openssl/include', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.libz/include', '-fPIC', '-D__MUSL__', '-D__OHOS__', '-D__OPENHARMONY__', '-Wno-shorten-64-to-32', '-Wno-unused-command-line-argument', '-I/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64/include', '-I/home/xhw/Desktop/OH/oh-cross-toolchain/ohos-sdk/15/native/sysroot/usr/include', '-I/home/xhw/Desktop/OH/oh-cross-toolchain/ohos-sdk/15/native/sysroot/usr/include/aarch64-linux-ohos' ]
+common_ld_flags = [ '-lpython3.12', '-L/home/xhw/Desktop/OH/oh-edu-python/crossenv_aarch64/cross/lib/python3.12/site-packages/numpy/core/lib', '-L/home/xhw/Desktop/OH/oh-edu-python/crossenv_aarch64/cross/lib/python3.12/site-packages/numpy/_core/lib', '-L/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.python3/lib', '-L/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.util-linux/lib', '-L/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.libgettext/lib', '-L/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.libreadline/lib', '-L/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.libncursesw/lib', '-L/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.xz/lib', '-L/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.bzip2/lib', '-L/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.sqlite/lib', '-L/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.libffi/lib', '-L/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.openssl/lib', '-L/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64.libz/lib', '-fuse-ld=lld', '-lm', '-L/home/xhw/Desktop/OH/oh-edu-python/dist.aarch64/lib', '-L/home/xhw/Desktop/OH/oh-cross-toolchain/ohos-sdk/15/native/sysroot/usr/lib' ]
+sitepkg = hostpy_root/'lib/python' + py_ver + '/site-packages'
+
+[built-in options]
+c_args = common_flags + common_c_flags
+cpp_args = common_flags + common_c_flags
+c_link_args = common_flags + common_ld_flags
+cpp_link_args = common_flags + common_ld_flags
+
+[properties]
+cmake_toolchain_file = ohos_sdk / 'native/build/cmake/ohos.toolchain.cmake'
+sizeof_long_double = 8
+longdouble_format = 'IEEE_DOUBLE_LE'
+
+# added to generated toolchain file
+[cmake]
+CMAKE_CROSSCOMPILING = 'ON'
+OHOS_ARCH = host_arch
+SSRVODKA_APPEND_COMMON_CFLAGS = ""
+SSRVODKA_APPEND_COMMON_LINK_FLAGS = ""
+SSRVODKA_APPEND_CMAKE_PREFIX_PATH = ""
+SSRVODKA_APPEND_CMAKE_FIND_ROOT_PATH = ""
+
+[binaries]
+c = toolchain / 'aarch64-unknown-linux-ohos-clang'
+cpp = toolchain / 'aarch64-unknown-linux-ohos-clang++'
+# use pkgconfig on build machine
+pkg-config = '/usr/bin/pkg-config'
+llvm-config = proj_root / 'llvm-config-wrapper/llvm-config'
+cmake = ohos_sdk / 'native/build-tools/cmake/bin/cmake'
+python = hostpy_root / 'bin/python3'
+cython = ''
+cython3 = cython
+fortran = host_cpu + '-linux-gnu-gfortran-11'
+as = toolchain / 'llvm-as'
+ld = toolchain / 'ld.lld'
+c_ld = ld
+cpp_ld = ld
+lld = toolchain / 'ld.lld'
+strip = toolchain / 'llvm-strip'
+ranlib = toolchain / 'llvm-ranlib'
+objdump = toolchain / 'llvm-objdump'
+objcopy = toolchain / 'llvm-objcopy'
+readelf = toolchain / 'llvm-readelf'
+nm = toolchain / 'llvm-nm'
+ar = toolchain / 'llvm-ar'
+profdata = toolchain / 'llvm-profdata'
+
+[host_machine]
+system = 'ohos'
+kernel = 'linux'
+cpu_family = host_cpu
+cpu = host_cpu
+endian = 'little'
+
