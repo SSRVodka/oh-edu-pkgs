@@ -16,3 +16,23 @@
  
  bool equivalent(dtype const & a, dtype const & b) {
      // On Windows x64, the behaviour described on 
+--- boost/libs/context/build/Jamfile.v2		2025-12-08 22:55:51.945733762 +0800
++++ boost/libs/context/build/Jamfile.v2.oh	2025-12-08 22:56:08.584375226 +0800
+@@ -206,6 +206,17 @@
+      <toolset>gcc
+    ;
+ 
++alias asm_sources
++   : asm/make_arm64_aapcs_elf_gas.S
++     asm/jump_arm64_aapcs_elf_gas.S
++     asm/ontop_arm64_aapcs_elf_gas.S
++   : <abi>sysv
++     <address-model>64
++     <architecture>arm
++     <binary-format>elf
++     <toolset>gcc
++   ;
++
+ # ARM64/AAPCS/MACH-O
+ alias asm_sources
+    : asm/make_arm64_aapcs_macho_gas.S

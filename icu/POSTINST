@@ -1,0 +1,9 @@
+#!/bin/bash
+set -Eeuo pipefail
+_prefix=${1:-}
+if [ -z "$_prefix" ]; then
+	echo "ERROR: empty prefix in 1st parameter"
+	exit 1
+fi
+final_mk=$(readlink -f ${_prefix}/lib/icu/Makefile.inc)
+sed -i -e "s|^\(libdir[[:space:]]*=[[:space:]]*\).*|\1\${prefix}/lib|g" 	-e "s|^\(prefix[[:space:]]*=[[:space:]]*\).*|\1${_prefix}|g" 	${final_mk}

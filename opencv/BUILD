@@ -12,16 +12,17 @@ setup() {
 # TODO: please fill in the variables for this package
 
 # [REQUIRED, NON-EMPTY, SEMVER]
-pkg_version="3.12.12"
+pkg_version="4.11.0"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
-pkg_name="python3"
+pkg_name="opencv"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps="libz>=1.0,openssl>=3.0,libffi>3.0,sqlite>3.0,bzip2>=1.0,xz>=5.8,libncursesw>6.0,libreadline>=8.1,libgettext>=0.24,util-linux>2.0"
+# NOTE: python3>=3.9 use numpy>=2. See https://github.com/opencv/opencv-python/blob/4.x/pyproject.toml
+pkg_deps="python3>=3.9,python3-numpy2>=2,openblas,ffmpeg>=4"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="libz>=1.0,openssl>=3.0,libffi>3.0,sqlite>3.0,bzip2>=1.0,xz>=5.8,libncursesw>6.0,libreadline>=8.1,libgettext>=0.24,util-linux>2.0"
+pkg_build_deps="python3>=3.9,python3-numpy2>=2,openblas,ffmpeg>=4"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
-pkg_source_url="https://www.python.org/ftp/python/3.12.12/Python-3.12.12.tgz"
+pkg_source_url="https://github.com/opencv/opencv-python.git"
 # [OPTIONAL, VALID-URL]
 pkg_release_url=""
 ###################################################
@@ -29,10 +30,10 @@ pkg_license="Apache-2.0"
 # [REQUIRED, NON-EMPTY, seperated by commas, NO-SPACE]. e.g., x86_64,aarch64,arm,riscv
 pkg_support_archs="x86_64,aarch64,arm"
 # [REQUIED, NON-EMPTY]
-# choose one: "autotools" (configure and make), "cmake", "meson"
-pkg_build_type="autotools"
+# choose one: "autotools" (configure and make), "cmake", "meson", "custom" ("custom" will skip the default build process)
+pkg_build_type="cmake"
 # [OPTIONAL]
-pkg_build_parallism=""
+pkg_build_parallism="20"
 
 ####### build type related (all OPTIONAL) #######
 
@@ -42,12 +43,12 @@ pkg_build_autotools_bootstrap_script=""
 pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
 
-pkg_build_cmake_extra_cmake_flags=""
+pkg_build_cmake_extra_cmake_flags="-DCMAKE_FIND_ROOT_PATH=${HOST_PYTHON_DIST} -DPYTHON_INCLUDE_DIRS=${HOST_PYTHON_DIST}/include -DPYTHON3_INCLUDE_PATH=${HOST_PYTHON_DIST}/include/python${PY_VERSION} -DPYTHON3_LIBRARIES=${HOST_PYTHON_DIST}/${OHOS_LIBDIR}/libpython${PY_VERSION}.so -DPYTHON3_NUMPY_INCLUDE_DIRS=${NUMPY2_LIBROOT}/include"
 pkg_build_cmake_extra_cmake_prefix_path=""
-pkg_build_cmake_extra_cflags=""
+pkg_build_cmake_extra_cflags="$CFLAGS"
 # NOTE: C preprocessor not CXX
-pkg_build_cmake_extra_cppflags=""
-pkg_build_cmake_extra_ldflags=""
+pkg_build_cmake_extra_cppflags="-D__MUSL__ -D__OPENHARMONY__ -D__OHOS__"
+pkg_build_cmake_extra_ldflags="$LDFLAGS"
 pkg_build_cmake_extra_cmake_findroot_path=""
 
 # fill in a relative path to this script
@@ -71,6 +72,11 @@ pkg_build_meson_extra_cmake_findroot_path=""
 #  6. you can use helper functions in setup.sh
 #  7. you can define your own function here but you can only use it for this package. If you want to define a function for building process of multiple packages, you should modify the setup.sh
 # 
+# Available global variables:
+#  - ${native_project_root}: the parent directory of setup.sh
+#  - ${native_sources_root}: root for native sources (staging area)
+#  - cross-compiling variables (reset for each package): CC, CXX, AR, CFLAGS, PKG_CONFIG_*, ...
+#  - global configurations: OHOS_ARCH, OHOS_CPU, OHOS_LIBDIR, PATCH_FILE_ROOT, MESON_CROSS_ROOT, HOST_SYSROOT, ... (see setup.sh)
 # Available local variables (except for native_env_hook):
 #  - ${current_source_url}: user configured `pkg_source_url` above (in `setup()`)
 #  - ${current}: the location (directory) of this script
@@ -81,32 +87,11 @@ pkg_build_meson_extra_cmake_findroot_path=""
 #########################################
 
 # Hook: called before setup.sh is sourced
-# NOTE: failure in this function will terminate this script immediately
+# NOTE:
+#  - failure in this function will terminate this script immediately
+#  - you can NOT use local variables defined above. you can only use ${native_project_root}, ${native_sources_root} built by builder.sh
 native_env_hook() {
-	# build build-python first
-	# NOTE: keep same with setup.sh
-	# NOTE: this variable will live after this package is built
-	BUILD_PYTHON_DIST=${native_project_root}/build-python.dist
-	echo "Set Build-Python Destination: ${BUILD_PYTHON_DIST}"
-	# no need to build
-	if [ -f "${BUILD_PYTHON_DIST}/bin/python3" ]; then
-		echo "skip building build-python: EXIST"
-		return 0
-	fi
-	# run setup to get pkg info
-	setup
-	# download source to source_root different from the xcompiling one
-	native_py3_src_root="$(get_native_src_root $pkg_name)"
-	if [ ! -d "${native_py3_src_root}" ]; then
-		wget_source "$pkg_source_url" "${native_py3_src_root}"
-	fi
-	pushd "${native_py3_src_root}"
-	./configure \
-		--prefix=${BUILD_PYTHON_DIST} \
-		--enable-shared
-	make -j
-	make install
-	popd
+	:
 }
 
 # Hook: customize downloading source process. called when pacakge manager is downloading the source.
@@ -114,7 +99,15 @@ native_env_hook() {
 # NOTE: you need to make sure the source locates in ${current_source_root}
 # 	if you set _custom_download_source_continue="false" caz default build process will use
 custom_download_source() {
-	_custom_download_source_continue=true
+	
+	mkdir -p ${current_source_root}
+	git clone $pkg_source_url ${current_source_root}
+	pushd ${current_source_root}
+	git switch 4.x
+	git submodule sync && git submodule update --init --recursive
+	popd
+
+	_custom_download_source_continue=false
 }
 
 ############### DO NOT MODIFY THIS PART #################
@@ -125,8 +118,7 @@ fi
 
 # Hook: called before entering build dir
 prebuilt_patch_hook() {
-	# patch configure: ohos triplet not supported
-	sed -i '/MULTIARCH=\$($CC --print-multiarch 2>\/dev\/null)/a PLATFORM_TRIPLET=$MULTIARCH' ${current_source_root}/configure
+	:
 }
 
 # Hook: same as `prebuilt_patch_hook` but executed once if the source directory is not changed (mark file PATCHED)
@@ -141,60 +133,10 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
-	pushd ${current_source_root}
-	# enable dylibs of build python
-	export LD_LIBRARY_PATH=${BUILD_PYTHON_DIST}/lib:$LD_LIBRARY_PATH
-	local py_deps=$(get_pkg_names_from_deps "$pkg_build_deps")
-	local dep
-	for dep in $py_deps; do
-		CFLAGS="$CFLAGS -I$(get_pkg_dst_dir $dep)/include"
-		LDFLAGS="$LDFLAGS -L$(get_pkg_dst_dir $dep)/${OHOS_LIBDIR}"
-		PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR:$(get_pkg_dst_dir $dep)/${OHOS_LIBDIR}/pkgconfig"
-	done
-	# add header path for fucking lzma, ncursesw, readline, uuid
-	CFLAGS="$CFLAGS -I$(get_pkg_dst_dir xz)/include/lzma -I$(get_pkg_dst_dir libncursesw)/include/ncursesw -I$(get_pkg_dst_dir libreadline)/include/readline -I$(get_pkg_dst_dir util-linux)/include/uuid"
-	local py_libdir=${target_root_prefix_without_pkgname}/${OHOS_LIBDIR}
-	./configure --libdir=${py_libdir} \
-		--with-platlibdir=${OHOS_LIBDIR} \
-		--target=${OHOS_CPU}-linux-musl \
-		--host=${OHOS_CPU}-linux-musl \
-		--build=x86_64-pc-linux-gnu \
-		--disable-ipv6 \
-		--enable-shared \
-		--with-libc=${HOST_LIBC} \
-		--with-build-python=${BUILD_PYTHON_DIST_PYTHON} \
-		--with-ensurepip=install \
-		--with-readline=readline \
-		--with-openssl=$(get_pkg_dst_dir openssl) \
-		--enable-loadable-sqlite-extensions \
-		--prefix=${target_root_prefix_without_pkgname} \
-		ac_cv_file__dev_ptmx=yes \
-		ac_cv_file__dev_ptc=no \
-		CC="${CC}" CXX="${CXX}" RANLIB="${RANLIB}" STRIP="${STRIP}" AR="${AR}" \
-		CFLAGS="${CFLAGS}" CPPFLAGS="${CFLAGS}" LDFLAGS="${LDFLAGS}" \
-		LD="${LD}" LDXX="${LDXX}" NM="${NM}" OBJDUMP="${OBJDUMP}" OBJCOPY="${OBJCOPY}" \
-		READELF="${READELF}" PROFDATA="${PROFDATA}" \
-		PKG_CONFIG_LIBDIR="${PKG_CONFIG_LIBDIR}"
-	make -j
-	make install
-	
-	popd
-
-	local _lost_lib=libpython${PY_VERSION}.so
-	local _dst_lib_dyload_pth=${py_libdir}/python${PY_VERSION}/lib-dynload
-	find "$_dst_lib_dyload_pth" -type f -name "*.so" -print0 | while IFS= read -r -d '' sofile; do
-		info "patch dynamic-linked file: $sofile"
-		if ! patchelf --add-needed "${_lost_lib}" "$sofile"; then
-			error "failed to process file $sofile"
-		fi
-	done
-	
-	mv_pkg_to_dst_dir $pkg_name
-	
-	patch_libdir_origin "python3" "skip-patch-so"
-	
-	# only use self-defined build process
-	_custom_build_continue=false
+	# make opencv's cmake happy
+	mkdir -p ${target_root_prefix_without_pkgname}/include
+	# continue to normal build process
+	_custom_build_continue=true
 }
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
