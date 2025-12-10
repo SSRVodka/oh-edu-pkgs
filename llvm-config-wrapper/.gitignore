@@ -1,0 +1,6 @@
+llvm-config
+llvm-config-wrapper.cpp
+
+bin/
+lib/
+libexec/
