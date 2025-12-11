@@ -16,9 +16,9 @@ pkg_version="0.46.1"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
 pkg_name="python3-wheel"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps=""
+pkg_deps="python3>3.7"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps=""
+pkg_build_deps="python3>3.7"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://github.com/pypa/wheel/archive/refs/tags/0.46.1.zip"
