@@ -39,7 +39,7 @@ pkg_build_parallism=""
 pkg_build_autotools_extra_configure_flags="--enable-shared"
 # fill in a relative path to the ${current_source_root} (defined below)
 pkg_build_autotools_bootstrap_script=""
-pkg_build_autotools_suffix_configure_flags=""
+pkg_build_autotools_suffix_configure_flags="ac_cv_func_reallocarray=no"
 pkg_build_autotools_configure_dir=""
 
 pkg_build_cmake_extra_cmake_flags=""

@@ -330,15 +330,31 @@ destroy_pycrossenv() {
 }
 
 download() {
+    local max_retries=3
+    local retry_delay=15
+    local attempt=1
     
     _custom_download_source_continue=true
     custom_download_source || { warn "custom_download_source process for '$current_source_root' failed"; return 1; }
     if [ "x$_custom_download_source_continue" != "xtrue" ]; then
         return 0
     fi
-
-    wget_source "${current_source_url}" "${current_source_root}" || { return 1; }
-    # source downloaded to ${current_source_root}
+    
+    while [ $attempt -le $max_retries ]; do
+        if wget_source "${current_source_url}" "${current_source_root}"; then
+            # source downloaded to ${current_source_root}
+            return 0
+        fi
+        
+        if [ $attempt -lt $max_retries ]; then
+            warn "Download attempt $attempt failed. Retrying in ${retry_delay} seconds..."
+            sleep $retry_delay
+            attempt=$((attempt + 1))
+        else
+            warn "Download failed after $max_retries attempts"
+            return 1
+        fi
+    done
 }
 
 build() {
