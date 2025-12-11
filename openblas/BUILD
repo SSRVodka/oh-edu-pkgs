@@ -138,8 +138,8 @@ custom_build() {
 	#../test-param.sh "${MAKE_FLAGS[@]}"
 	
 	# expand as separate words, preserving the CC value as one word even if it contains spaces/options
-	make "${MAKE_FLAGS[@]}"
-	make install PREFIX=${target_root_prefix_without_pkgname}
+	make "${MAKE_FLAGS[@]}" || { error "openblas make failed"; popd; popd; return 1; }
+	make install PREFIX=${target_root_prefix_without_pkgname} || { error "openblas install failed"; popd; popd; return 1; }
 
 	popd
 

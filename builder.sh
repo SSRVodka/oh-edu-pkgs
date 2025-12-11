@@ -515,9 +515,7 @@ main() {
         native_env_hook || { echo "fatal: native_env_hook failed"; exit 1; }
     done
 
-    . setup2.sh
-
-    # Override OHOS_CPU & OHOS_ARCH in setup.sh if --cpu was provided
+    # Specify OHOS_CPU & OHOS_ARCH for setup.sh if --cpu was provided
     if [ -n "$OHOS_CPU_VALUE" ]; then
         export OHOS_CPU="$OHOS_CPU_VALUE"
         if [ "${OHOS_CPU}" = "aarch64" ]; then
@@ -531,6 +529,9 @@ main() {
             exit 1
         fi
     fi
+
+    . setup2.sh
+
     info "Use OHOS_CPU=$OHOS_CPU, OHOS_ARCH=$OHOS_ARCH"
 
     local total=$# success=0 failed=0
