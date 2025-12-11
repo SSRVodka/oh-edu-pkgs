@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -xEeuo pipefail
+set -Eeuo pipefail
 
 CUR_DIR=$(dirname $(readlink -f $0))
 cd ${CUR_DIR}
@@ -62,7 +62,7 @@ while IFS= read -r line; do
     fi
     
     $PKG_TOOL --api ${OHOS_SDK_API_VERSION} -a ${OHOS_CPU} -n $name -i ${resd} \
-        -v $version -o $DEPLOY_DIR --depends "$build_deps" $arch_lib_isolation
+        -v $version -o $DEPLOY_DIR --depends "$build_deps" --no-archlib-isolation
     
 done < "$RT_VERSION_INFO"
 
@@ -71,7 +71,7 @@ find $DEPLOY_DIR -maxdepth 1 -name "*.json" | while read file; do
 	name=$(basename "$file" .json)
 	abs_dir=$(dirname $(realpath "$file"))
 	echo "deploying $abs_dir/$name -> $REPO_DIR"
-	oh-pkgserver deploy $abs_dir/$name.pkg $abs_dir/$name.json --repo $REPO_DIR
+	$PKG_SERVER deploy $abs_dir/$name.pkg $abs_dir/$name.json --repo $REPO_DIR
 done
 
 

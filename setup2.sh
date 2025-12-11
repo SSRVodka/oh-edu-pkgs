@@ -1,7 +1,7 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-CUR_DIR=$(dirname $(readlink -f $0))
+CUR_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 cd $CUR_DIR
 
 info () { printf "%b%s%b" "\E[1;34m❯ \E[1;36m" "${1:-}" "\E[0m\n"; }
