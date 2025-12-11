@@ -29,7 +29,10 @@ pkg_license="Apache-2.0"
 # [REQUIRED, NON-EMPTY, seperated by commas, NO-SPACE]. e.g., x86_64,aarch64,arm,riscv
 pkg_support_archs="x86_64,aarch64,arm"
 # [REQUIED, NON-EMPTY]
-# choose one: "autotools" (configure and make), "cmake", "meson"
+# choose one: "autotools" (configure and make), "cmake", "meson", "pure-python", "custom"
+# NOTE:
+#  - "pure-python" is ONLY valid for those packages without ANY native package dependency.
+#  - "custom" will skip the default build process
 pkg_build_type=""
 # [OPTIONAL]
 pkg_build_parallism=""
@@ -50,7 +53,7 @@ pkg_build_cmake_extra_cppflags=""
 pkg_build_cmake_extra_ldflags=""
 pkg_build_cmake_extra_cmake_findroot_path=""
 
-# fill in a relative path to this script
+# fill in a absolute path
 pkg_build_meson_cross_file=""
 pkg_build_meson_extra_meson_flags=""
 pkg_build_meson_extra_cflags=""
@@ -70,6 +73,7 @@ pkg_build_meson_extra_cmake_findroot_path=""
 #  5. important cross-compiling variables will be reset after building each package (like CFLAGS, CXXFLAGS, LDFLAGS, CC, CXX, AR, PKG_CONFIG_LIBDIR, ...)
 #  6. you can use helper functions in setup.sh
 #  7. you can define your own function here but you can only use it for this package. If you want to define a function for building process of multiple packages, you should modify the setup.sh
+#  8. you are responsible to handle all the failures in hooks (commands may continue if you not deal with it)
 # 
 # Available global variables:
 #  - ${native_project_root}: the parent directory of setup.sh

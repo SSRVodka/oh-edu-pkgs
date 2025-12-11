@@ -14,6 +14,7 @@ SCRIPT_DIR=$(dirname $(readlink -f $0))
 cd ${SCRIPT_DIR}
 
 VERSION_FILE="$SCRIPT_DIR/VERSION"
+rm -f $VERSION_FILE
 
 # helper: extract value of a key from a file (removes surrounding double quotes)
 # usage: extract KEY FILE

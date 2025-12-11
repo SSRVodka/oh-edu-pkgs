@@ -27,3 +27,4 @@ VERSION
 *.log
 *.old
 .vscode
+.staging*
