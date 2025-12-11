@@ -18,7 +18,7 @@ pkg_name="libdrm"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
 pkg_deps=""
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps=""
+pkg_build_deps="python3,python3-build,python3-setuptools"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://dri.freedesktop.org/libdrm/libdrm-2.4.127.tar.xz"

@@ -18,7 +18,7 @@ pkg_name="xorg"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
 pkg_deps="fontconfig>=2.0"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="fontconfig>=2.0,freetype>2.0,libncursesw>6.0,libreadline>8.0,icu>70.0,libexpat>2.0,libxml2>2.0,libiconv>1.0"
+pkg_build_deps="fontconfig>=2.0,freetype>2.0,libncursesw>6.0,libreadline>8.0,icu>70.0,libexpat>2.0,libxml2>2.0,libiconv>1.0,python3,python3-build,python3-setuptools"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://www.x.org/pub/individual/lib/"

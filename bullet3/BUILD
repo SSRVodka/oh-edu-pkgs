@@ -18,7 +18,7 @@ pkg_name="bullet3"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
 pkg_deps="glu>=9.0,mesa>=25.0,xorg,python3>3.9,python3-numpy2==2.3.1"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="glu>=9.0,mesa>=25.0,xorg,python3>3.9,python3-numpy2==2.3.1,openblas"
+pkg_build_deps="glu>=9.0,mesa>=25.0,xorg,python3>3.9,python3-numpy2==2.3.1,openblas,python3-build,python3-wheel,python3-setuptools"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://github.com/bulletphysics/bullet3/archive/refs/tags/3.25.zip"

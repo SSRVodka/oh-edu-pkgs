@@ -18,6 +18,7 @@ pkg_name=""
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
 pkg_deps=""
 # [OPTIONAL, seperated by commas, NO-SPACE]
+# NOTE: you need to add build deps "python3,python3-build,python3-setuptools" if you use setup_pycrossenv in hooks
 pkg_build_deps=""
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
@@ -32,6 +33,7 @@ pkg_support_archs="x86_64,aarch64,arm"
 # choose one: "autotools" (configure and make), "cmake", "meson", "pure-python", "custom"
 # NOTE:
 #  - "pure-python" is ONLY valid for those packages without ANY native package dependency.
+#  - add "python3,python3-build,python3-wheel,python3-setuptools" to pkg_build_deps if you use "pure-python"
 #  - "custom" will skip the default build process
 pkg_build_type=""
 # [OPTIONAL]
