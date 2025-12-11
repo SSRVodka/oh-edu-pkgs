@@ -7,7 +7,7 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 ### 进度
 
 
-- [x] 70+ 系统依赖库：如 openblas, binutils, zstd, curl, ...
+- [x] 80+ 系统依赖库：如 openblas, binutils, zstd, curl, ...
 
 - [x] Python 解释器，及常见 native 库：libaacplus、x264、alsa-lib、ffmpeg、bzip2、gettext、libffi、ncurses、OpenBLAS、openssl、readline、sqlite3、xz、zlib；
 
@@ -22,6 +22,10 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 1. 首先需要设置环境变量 OHOS_SDK（建议写入 .bashrc/.zshrc）为你的 OpenHarmony SDK 的根目录。请注意，它需要包含 API 版本号，例如 [...]/15；
 
 2. 您需要安装 [`DEPS`](./DEPS) 中指定的包来为构建做准备。如果您不想看安装了什么包，可以直接执行 `source ./DEPS`；
+
+### 测试
+
+如果您想要测试该补丁框架能否正确编译，暂时不想使用 ohloha 管理，您可以使用本仓库的 `test-build-*.sh` 系列脚本。执行这些脚本（任意一个）后会开始按预设的顺序依次编译。例如 `test-build-opencv-and-deps.sh` 会按顺序编译 opencv 和所需的依赖库并输出到 `dist.<arch>.*`；
 
 ### 迁移和编译指南
 
