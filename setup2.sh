@@ -249,9 +249,9 @@ build_makeproj_with_deps() {
 	$configure_exe $configure_flags
 
 	#read -p "check >>> "
-	make -j${make_parallism}
+	make -j${make_parallism} || { return 1; }
 	#read -p "check >>> "
-	make install
+	make install || { return 1; }
 
 	CFLAGS="$OLD_CFLAGS"
 	CXXFLAGS="$OLD_CXXFLAGS"
@@ -338,11 +338,11 @@ build_cmakeproj_with_deps() {
 		-DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_VERBOSE_MAKEFILE=ON \
 		-DCMAKE_CROSSCOMPILING=ON \
-		-B ${_my_cmake_builddir}
+		-B ${_my_cmake_builddir} || { return 1; }
 
 	#read -p "Check >>> "
-	${CMAKE_BIN} --build ${_my_cmake_builddir} -j${parallism}
-	${CMAKE_BIN} --install ${_my_cmake_builddir}
+	${CMAKE_BIN} --build ${_my_cmake_builddir} -j${parallism} || { return 1; }
+	${CMAKE_BIN} --install ${_my_cmake_builddir} || { return 1; }
 
 	PKG_CONFIG_LIBDIR="$OLD_PKG_CONFIG_LIBDIR"
 	popd
@@ -419,10 +419,11 @@ build_mesonproj_with_deps() {
 		--libdir=${OHOS_LIBDIR} \
 		--buildtype=release \
 		${_my_extra_meson_flags} \
-		..
+		.. \
+	|| { return 1; }
 	# read -p "check >>> "
-	ninja -v -j${parallism}
-	ninja install
+	ninja -v -j${parallism} || { return 1; }
+	ninja install || { return 1; }
 
 	PKG_CONFIG_LIBDIR="$OLD_PKG_CONFIG_LIBDIR"
 	popd

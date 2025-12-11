@@ -29,7 +29,7 @@ validate_semver() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?(\+[a-zA-Z
 validate_version() { [[ "$1" =~ ^[0-9]+(\.[0-9]+){0,2}(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$ ]]; }
 validate_url() { [[ "$1" =~ ^https?:// ]]; }
 validate_no_space() { [[ ! "$1" =~ [[:space:]] ]]; }
-validate_build_type() { [[ "$1" =~ ^(autotools|cmake|meson|custom)$ ]]; }
+validate_build_type() { [[ "$1" =~ ^(autotools|cmake|meson|pure-python|custom)$ ]]; }
 validate_archs() {
     local IFS=','
     for arch in $1; do
@@ -39,8 +39,14 @@ validate_archs() {
 
 # Extract package names from comma-separated dependency string,
 # stripping version constraints (e.g., >=1.0, <2.0, =3.0).
+# Output: de-duplicated package names separated by space
 get_pkg_names_from_deps() {
-    printf '%s' "${1:-}" | tr ',' '\n' | sed 's/[<>=].*//' | xargs
+    # printf '%s' "${1:-}" | tr ',' '\n' | sed 's/[<>=].*//' | xargs
+    printf '%s' "$1" |
+        tr ',' '\n' |
+        sed 's/[<>=].*//' |
+        awk '!seen[$0]++' |
+        xargs
 }
 
 # Get the source root directory (in staging area) of the specific package
@@ -49,10 +55,13 @@ get_pkg_src_root() {
     printf '%s/%s' "${sources_root}" "${1:-}"
 }
 
+get_native_src_root() {
+    printf '%s/%s' "${native_sources_root}" "${1:-}"
+}
+
 # Get the build output directory (in staging area) of the specific package
-# NOTE: it can ONLY be used in build_package
 get_pkg_dst_dir() {
-    printf '%s.%s' "${target_root_prefix_without_pkgname}" "${1:-}"
+    printf '%s.%s' "${TARGET_ROOT}" "${1:-}"
 }
 
 # Move (merge) package $1 from $2 (default ${target_root_prefix_without_pkgname}, output internal directory) to ${target_root_with_pkgname}
@@ -366,7 +375,8 @@ build() {
                 "$pkg_build_autotools_bootstrap_script" \
                 "$pkg_build_autotools_suffix_configure_flags" \
                 "$pkg_build_parallism" \
-                "$pkg_build_autotools_configure_dir"
+                "$pkg_build_autotools_configure_dir" \
+            || { error "build_makeproj_with_deps failed"; return 1; }
             ;;
         xcmake)
             build_cmakeproj_with_deps \
@@ -379,20 +389,29 @@ build() {
                 "$pkg_build_cmake_extra_ldflags" \
                 "$pkg_build_parallism" \
                 "$pkg_build_cmake_extra_cmake_findroot_path" \
-                "ohos-build"
+                "ohos-build" \
+            || { error "build_cmakeproj_with_deps failed"; return 1; }
             ;;
         xmeson)
             build_mesonproj_with_deps \
                 "$target" \
                 "$deps_sep_space" \
-                "$current_build_file_dir/$pkg_build_meson_cross_file" \
+                "$pkg_build_meson_cross_file" \
                 "$pkg_build_meson_extra_meson_flags" \
                 "$pkg_build_parallism" \
                 "$pkg_build_meson_extra_cflags" \
                 "$pkg_build_meson_extra_ldflags" \
                 "$pkg_build_meson_extra_cmake_prefix_path" \
                 "$pkg_build_meson_extra_cmake_findroot_path" \
-                "ohos-build"
+                "ohos-build" \
+            || { error "build_mesonproj_with_deps failed"; return 1; }
+            ;;
+        xpure-python)
+            pushd ${current_source_root}
+            setup_pycrossenv
+            pip install -v --no-binary :all: . || { error "pure-python pip build failed"; destroy_pycrossenv; popd; return 1; }
+            destroy_pycrossenv
+            popd
             ;;
         xcustom)
             info "user-defined custom build process finished"

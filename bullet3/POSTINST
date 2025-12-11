@@ -1,0 +1,8 @@
+#!/bin/bash
+set -Eeuo pipefail
+_prefix=${1:-}
+if [ -z "$_prefix" ]; then
+	echo "ERROR: empty prefix in 1st parameter"
+	exit 1
+fi
+sed -i "s|\(.* BULLET_ROOT_DIR .*\"\).*\(\".*\)|\1${_prefix}\2|" ${_prefix}/lib/cmake/bullet/BulletConfig.cmake
