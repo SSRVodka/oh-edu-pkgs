@@ -480,12 +480,17 @@ build_package() {
 # NOTE: we will not resolve dependencies here! Make sure BUILD_FILEs are already topologically sorted
 main() {
     local CONTINUE_ON_FAIL=false
+    local OHOS_CPU_VALUE=""
 
-    # parse simple options (only --continue-on-fail supported)
+    # parse simple options
     while [ "$#" -gt 0 ]; do
         case "$1" in
             --continue-on-fail)
                 CONTINUE_ON_FAIL=true
+                shift
+                ;;
+            --cpu=*)
+                OHOS_CPU_VALUE="${1#--cpu=}"
                 shift
                 ;;
             --)
@@ -502,7 +507,7 @@ main() {
         esac
     done
 
-    [[ $# -eq 0 ]] && echo "Usage: $0 [--continue-on-fail] <BUILD_FILE> [BUILD_FILE...]" && exit 1
+    [[ $# -eq 0 ]] && echo "Usage: $0 [--continue-on-fail] [--cpu=aarch64|arm|x86_64] <BUILD_FILE> [BUILD_FILE...]" && exit 1
 
     # trigger presetup env hooks
     for build_file in "$@"; do
@@ -511,6 +516,22 @@ main() {
     done
 
     . setup2.sh
+
+    # Override OHOS_CPU & OHOS_ARCH in setup.sh if --cpu was provided
+    if [ -n "$OHOS_CPU_VALUE" ]; then
+        export OHOS_CPU="$OHOS_CPU_VALUE"
+        if [ "${OHOS_CPU}" = "aarch64" ]; then
+            export OHOS_ARCH="arm64-v8a"
+        elif [ "${OHOS_CPU}" = "arm" ]; then
+            export OHOS_ARCH="armeabi-v7a"
+        elif [ "${OHOS_CPU}" = "x86_64" ]; then
+            export OHOS_ARCH="x86_64"
+        else
+            error "Unsupported cpu '$OHOS_CPU' (supported 'aarch64', 'arm', 'x86_64')"
+            exit 1
+        fi
+    fi
+    info "Use OHOS_CPU=$OHOS_CPU, OHOS_ARCH=$OHOS_ARCH"
 
     local total=$# success=0 failed=0
 

@@ -26,12 +26,15 @@ CMAKE_BIN=${OHOS_SDK}/native/build-tools/cmake/bin/cmake
 #CMAKE_TOOLCHAIN_CONFIG=${OHOS_SDK}/native/build/cmake/ohos.toolchain.cmake
 CMAKE_TOOLCHAIN_CONFIG=${CUR_DIR}/cmake/ohos.toolchain.xhw.cmake
 
+if [ -z "${OHOS_CPU:-}" ] || [ -z "${OHOS_ARCH:-}" ]; then
+info "OHOS_CPU/OHOS_ARCH not specify: use aarch64 by default"
 OHOS_CPU=aarch64
 OHOS_ARCH=arm64-v8a
 # OHOS_CPU=arm
 # OHOS_ARCH=armeabi-v7a
 # OHOS_CPU=x86_64
 # OHOS_ARCH=x86_64
+fi
 
 ARCH=${OHOS_ARCH}
 

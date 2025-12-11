@@ -29,7 +29,7 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 
 ### 迁移和编译指南
 
-如需配置架构，请参考注释修改 `setup2.sh` 的 `OHOS_CPU` 和 `OHOS_ARCH` 定义即可。
+如需配置架构，请参考注释修改 `setup2.sh` 的 `OHOS_CPU` 和 `OHOS_ARCH` 定义，或者调用 `builder.sh` 时指定 `--cpu` 参数（可选 `aarch64/arm/x86_64`）即可。
 
 请使用 `./pkgs-create.sh` 从模板创建一个迁移工具。举例：
 
