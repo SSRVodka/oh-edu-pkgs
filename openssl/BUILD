@@ -21,7 +21,7 @@ pkg_deps="libz>=1.0"
 pkg_build_deps="libz>=1.0"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
-pkg_source_url="https://github.com/openssl/openssl/archive/refs/tags/openssl-3.5.0.zi"
+pkg_source_url="https://github.com/openssl/openssl/archive/refs/tags/openssl-3.5.0.zip"
 # [OPTIONAL, VALID-URL]
 pkg_release_url=""
 ###################################################
