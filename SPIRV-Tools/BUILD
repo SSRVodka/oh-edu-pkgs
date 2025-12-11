@@ -16,9 +16,9 @@ pkg_version="1.4.328"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
 pkg_name="SPIRV-Tools"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps="SPIRV-Tools==1.4.328"
+pkg_deps="SPIRV-Headers==1.4.328"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="SPIRV-Tools==1.4.328"
+pkg_build_deps="SPIRV-Headers==1.4.328"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://github.com/KhronosGroup/SPIRV-Tools/archive/vulkan-sdk-1.4.328.1/SPIRV-Tools-vulkan-sdk-1.4.328.1.tar.gz"
