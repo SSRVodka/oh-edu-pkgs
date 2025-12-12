@@ -16,9 +16,9 @@ pkg_version="5.15.12"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
 pkg_name="qt5"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps=""
+pkg_deps="openssl>=3.0"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps=""
+pkg_build_deps="openssl>=3.0"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://gitcode.com/qtforohos/qt5.git"
