@@ -133,6 +133,32 @@ prebuilt_patch_once_hook() {
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
 
+	# for native build
+	CC="gcc"
+	CXX="g++"
+	CFLAGS=""
+	CXXFLAGS=""
+	CPPFLAGS=""
+	LDFLAGS=""
+
+	pushd ${current_source_root}
+
+	local LLVM_LIBSUFFIX="${OHOS_LIBDIR#*/}"
+	local LLVM_EXTFLAG=""
+	if [ ! $LLVM_LIBSUFFIX == "$OHOS_LIBDIR" ]; then
+		LLVM_EXTFLAG="-DLLVM_LIBDIR_SUFFIX=/${LLVM_LIBSUFFIX}"
+	fi
+
+	# native build
+	$CMAKE_BIN \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_VERBOSE_MAKEFILE=ON \
+		-DLLVM_ENABLE_PROJECTS="lld;clang" \
+		-DLLVM_LINK_LLVM_DYLIB=ON \
+		-S llvm \
+		-B native-build || { error "llvm (native) configure failed"; popd; return 1; }
+	$CMAKE_BIN --build native-build -- -j20 || { error "llvm (native) build failed"; popd; return 1; }
+	
 	# remove --target
 	CC="${OHOS_SDK}/native/llvm/bin/clang"
 	CXX="${OHOS_SDK}/native/llvm/bin/clang++"
@@ -176,22 +202,7 @@ local COMP_FLAGS="-DCMAKE_BUILD_TYPE=Release \
 -DHAVE_POSIX_REGEX=0 \
 -DHAVE_STEADY_CLOCK=0"
 	
-local CONF_FLAGS="-DLIBCXX_HAS_MUSL_LIBC=ON \
--DCOMPILER_RT_BUILD_GWP_ASAN=OFF \
--DLIBOMP_OMPD_GDB_SUPPORT=OFF \
--DLLVM_NATIVE_TOOL_DIR=/usr/bin \
--DCROSS_TOOLCHAIN_FLAGS_NATIVE=\"-DLLVM_NATIVE_TOOL_DIR=/usr/bin;-DCMAKE_SYSROOT=/usr;-DLLVM_DEFAULT_TARGET_TRIPLE=${BUILD_PLATFORM_TRIPLET}\" \
--DLLVM_HOST_TRIPLE=${TARGET} \
--DCOMPILER_RT_DEFAULT_TARGET_TRIPLE=${TARGET} \
--DCOMPILER_RT_USE_BUILTINS_LIBRARY=ON \
-"
-	pushd ${current_source_root}
-
-	local LLVM_LIBSUFFIX="${OHOS_LIBDIR#*/}"
-	local LLVM_EXTFLAG=""
-	if [ ! $LLVM_LIBSUFFIX == "$OHOS_LIBDIR" ]]; then
-		LLVM_EXTFLAG="-DLLVM_LIBDIR_SUFFIX=/${LLVM_LIBSUFFIX}"
-	fi
+	# cross build
 	$CMAKE_BIN \
 		${COMP_FLAGS} \
 		-DCMAKE_INSTALL_LIBDIR=${OHOS_LIBDIR} \
@@ -201,21 +212,13 @@ local CONF_FLAGS="-DLIBCXX_HAS_MUSL_LIBC=ON \
 		-DCMAKE_TOOLCHAIN_FILE=${current_source_root}/$TARGET-clang.cmake \
 		-DLLVM_LINK_LLVM_DYLIB=ON \
 		-DLLVM_HOST_TRIPLE=$TARGET \
+		-DLLVM_NATIVE_TOOL_DIR=${current_source_root}/native-build/bin \
 		-S llvm \
 		-B ohos-build || { error "llvm cmake configure failed"; popd; return 1; }
 	
 	$CMAKE_BIN --build ohos-build -- -j20 || { error "llvm cmake build failed"; popd; return 1; }
 	$CMAKE_BIN --install ohos-build || { error "llvm cmake install failed"; popd; return 1; }
 
-	# native build
-	$CMAKE_BIN \
-		-DCMAKE_BUILD_TYPE=Release \
-		-DCMAKE_VERBOSE_MAKEFILE=ON \
-		-DLLVM_ENABLE_PROJECTS="lld;clang" \
-		-DLLVM_LINK_LLVM_DYLIB=ON \
-		-S llvm \
-		-B native-build || { error "llvm (native) configure failed"; popd; return 1; }
-	$CMAKE_BIN --build native-build -- -j20 || { error "llvm (native) build failed"; popd; return 1; }
 
 	popd
 
