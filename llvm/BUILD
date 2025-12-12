@@ -202,10 +202,10 @@ local CONF_FLAGS="-DLIBCXX_HAS_MUSL_LIBC=ON \
 		-DLLVM_LINK_LLVM_DYLIB=ON \
 		-DLLVM_HOST_TRIPLE=$TARGET \
 		-S llvm \
-		-B ohos-build
+		-B ohos-build || { error "llvm cmake configure failed"; popd; return 1; }
 	
-	$CMAKE_BIN --build ohos-build -- -j20
-	$CMAKE_BIN --install ohos-build
+	$CMAKE_BIN --build ohos-build -- -j20 || { error "llvm cmake build failed"; popd; return 1; }
+	$CMAKE_BIN --install ohos-build || { error "llvm cmake install failed"; popd; return 1; }
 
 	# native build
 	$CMAKE_BIN \
@@ -214,8 +214,8 @@ local CONF_FLAGS="-DLIBCXX_HAS_MUSL_LIBC=ON \
 		-DLLVM_ENABLE_PROJECTS="lld;clang" \
 		-DLLVM_LINK_LLVM_DYLIB=ON \
 		-S llvm \
-		-B native-build
-	$CMAKE_BIN --build native-build -- -j20
+		-B native-build || { error "llvm (native) configure failed"; popd; return 1; }
+	$CMAKE_BIN --build native-build -- -j20 || { error "llvm (native) build failed"; popd; return 1; }
 
 	popd
 
