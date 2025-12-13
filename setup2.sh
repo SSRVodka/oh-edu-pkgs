@@ -624,7 +624,7 @@ enter_pycrossenv() {
 		$BUILD_PIP install crossenv
 		$BUILD_PYTHON -m crossenv \
 			$HOST_PYTHON \
-			crossenv_${OHOS_CPU}
+			${CROSS_ROOT}
 	fi
 	. ${CROSS_ROOT}/bin/activate
 }
