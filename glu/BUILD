@@ -18,7 +18,7 @@ pkg_name="glu"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
 pkg_deps="mesa>=25.0"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="mesa>=25.0,xorg>=7.0,libdrm>2.0,glslang>=16.0,llvm>20.0,SPIRV-LLVM-Translator>=21.0,SPIRV-Headers>=1.4,SPIRV-Tools>=1.4,zstd>=1.0,fontconfig>=2.17,freetype>2.0,libncursesw>6.0,libreadline>8.0,icu>70.0,libexpat>2.0,libxml2>2.0,libiconv>1.0"
+pkg_build_deps="mesa>=25.0,xorg>=7.0,libdrm>2.0,glslang>=16.0,llvm>20.0,SPIRV-LLVM-Translator>=21.0,SPIRV-Headers>=1.4,SPIRV-Tools>=1.4,zstd>=1.0,fontconfig>=2.17,freetype>2.0,libncursesw>6.0,libreadline>8.0,icu>70.0,libexpat>2.0,libxml2>2.0,libiconv>1.0,python3,python3-build,python3-setuptools"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://archive.mesa3d.org/glu/glu-9.0.3.tar.xz"
@@ -134,12 +134,14 @@ custom_build() {
 	CFLAGS="-I$(get_pkg_dst_dir freetype)/include/freetype2 -I$(get_pkg_dst_dir libncursesw)/include/ncursesw -I$(get_pkg_dst_dir libreadline)/include/readline -D_GNU_SOURCE $CFLAGS"
 	CXXFLAGS=$CFLAGS
 
+	# enter build env
+	setup_pycrossenv
 	_custom_build_continue=true
 }
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	:
+	destroy_pycrossenv || true
 }
 
 ################ self-defined functions (local) goes below ################

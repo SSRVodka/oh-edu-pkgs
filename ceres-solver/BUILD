@@ -45,7 +45,7 @@ pkg_build_autotools_bootstrap_script=""
 pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
 
-pkg_build_cmake_extra_cmake_flags="-DBUILD_SHARED_LIBS=ON"
+pkg_build_cmake_extra_cmake_flags="-DBUILD_SHARED_LIBS=ON -DUSE_CUDA=OFF"
 pkg_build_cmake_extra_cmake_prefix_path=""
 pkg_build_cmake_extra_cflags=""
 # NOTE: C preprocessor not CXX

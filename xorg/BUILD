@@ -120,7 +120,7 @@ custom_download_source() {
 
 	XLIBS_MD5_FN=lib-7.md5
 	XPROTOS_MD5_FN=proto-7.md5
-	# necessary as a global var
+	# NOTE: keep track with that in custom_build hook
 	LIBNAME_LIST=libnames.list
 
 	mkdir -p xlibs xprotos
@@ -263,6 +263,9 @@ prebuilt_patch_once_hook() {
 custom_build() {
 
 	setup_pycrossenv
+
+	# keep track with that in custom_download_source
+	LIBNAME_LIST=libnames.list
 	
 	XORG_PREFIX=${target_root_with_pkgname}
 	# XORG_CONFIG="--sysconfdir=/etc --localstatedir=/data --disable-static"

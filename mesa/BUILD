@@ -18,7 +18,7 @@ pkg_name="mesa"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
 pkg_deps="xorg>=7.0,libdrm>2.0,glslang>=16.0,llvm>20.0,SPIRV-LLVM-Translator>=21.0,zstd>=1.0"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="xorg>=7.0,libdrm>2.0,glslang>=16.0,llvm>20.0,SPIRV-LLVM-Translator>=21.0,SPIRV-Headers>=1.4,SPIRV-Tools>=1.4,zstd>=1.0,fontconfig>=2.17,freetype>2.0,libncursesw>6.0,libreadline>8.0,icu>70.0,libexpat>2.0,libxml2>2.0,libiconv>1.0"
+pkg_build_deps="xorg>=7.0,libdrm>2.0,glslang>=16.0,llvm>20.0,SPIRV-LLVM-Translator>=21.0,SPIRV-Headers>=1.4,SPIRV-Tools>=1.4,zstd>=1.0,fontconfig>=2.17,freetype>2.0,libncursesw>6.0,libreadline>8.0,icu>70.0,libexpat>2.0,libxml2>2.0,libiconv>1.0,python3,python3-build,python3-setuptools"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://mesa.freedesktop.org/archive/mesa-25.2.2.tar.xz"
@@ -113,6 +113,10 @@ fi
 
 # Hook: called before entering build dir
 prebuilt_patch_hook() {
+
+	setup_pycrossenv
+	# destroy in post-built hook
+
 	reset_meson $MESON_CROSS_FILE_BASE
 	# preparing build-time python deps before building mesa
 	BUILDTIME_PY=$(which build-python)
@@ -155,7 +159,7 @@ custom_build() {
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	:
+	destroy_pycrossenv || true
 }
 
 ################ self-defined functions (local) goes below ################

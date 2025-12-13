@@ -138,7 +138,7 @@ custom_build() {
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	destroy_pycrossenv
+	destroy_pycrossenv || true
 }
 
 ################ self-defined functions (local) goes below ################

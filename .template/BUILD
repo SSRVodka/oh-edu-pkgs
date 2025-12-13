@@ -33,8 +33,9 @@ pkg_support_archs="x86_64,aarch64,arm"
 # choose one: "autotools" (configure and make), "cmake", "meson", "pure-python", "custom"
 # NOTE:
 #  - "pure-python" is ONLY valid for those packages without ANY native package dependency.
-#  - add "python3,python3-build,python3-wheel,python3-setuptools" to pkg_build_deps if you use "pure-python"
 #  - "custom" will skip the default build process
+#  - add "python3,python3-build,python3-wheel,python3-setuptools" to pkg_build_deps if you use "pure-python"
+#  - you may need to use setup_pycrossenv if you set pkg_build_type == "meson"
 pkg_build_type=""
 # [OPTIONAL]
 pkg_build_parallism=""
