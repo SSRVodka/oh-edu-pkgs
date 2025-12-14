@@ -657,7 +657,6 @@ PY_CROSS_ROOT=${CUR_DIR}/crossenv_${OHOS_CPU}
 CROSS_ROOT=$PY_CROSS_ROOT
 HOST_SITE_PKGS=${PY_CROSS_ROOT}/cross/lib/python${PY_VERSION}/site-packages
 
-PYPKG_NATIVE_OUTPUT_DIR=${CUR_DIR}/dist-pypkgs.native.${OHOS_CPU}
 PYPKG_OUTPUT_WHEEL_DIR=${CUR_DIR}/dist.wheels
 
 # numpy >= 2 use different header location

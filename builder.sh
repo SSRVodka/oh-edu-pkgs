@@ -21,6 +21,10 @@ target_root_prefix_without_pkgname=""
 
 native_project_root=$(dirname $(readlink -f $0))
 native_sources_root=${native_project_root}/.staging.native
+# ${native_dst_root}/bin will be added to PATH and ${native_dst_root}/lib
+# will be added to LD_LIBRARY_PATH when executing build_package
+# TODO: move host-python to here
+native_dst_root=${native_project_root}/.staging.ndst
 mkdir -p ${native_sources_root}
 
 
@@ -448,6 +452,10 @@ build_package() {
 
     clear_vars
     save_xcompile_flags
+
+    # setup dependencies for native binaries & libraries
+    PATH="${native_dst_root}/bin:$PATH"
+    LD_LIBRARY_PATH="${native_dst_root}/lib:$LD_LIBRARY_PATH"
     
     source "$build_file"
     setup || { error "setup() failed"; restore_xcompile_flags; clear_vars; return 1; }
