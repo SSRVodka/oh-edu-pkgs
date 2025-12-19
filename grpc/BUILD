@@ -49,7 +49,7 @@ pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
 pkg_build_autotools_make_install_target=""
 
-pkg_build_cmake_extra_cmake_flags="-DOHOS_ALLOW_UNDEFINED_SYMBOLS=ON -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_CXX_STANDARD=17 -DABSL_PROPAGATE_CXX_STD=ON -DgRPC_ZLIB_PROVIDER=package -DgRPC_SSL_PROVIDER=package -DgRPC_INSTALL=ON -DgRPC_INSTALL_LIBDIR=${OHOS_LIBDIR} -DgRPC_INSTALL_CMAKEDIR=${OHOS_LIBDIR}/cmake/grpc"
+pkg_build_cmake_extra_cmake_flags="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DOHOS_ALLOW_UNDEFINED_SYMBOLS=ON -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_CXX_STANDARD=17 -DABSL_PROPAGATE_CXX_STD=ON -DgRPC_ZLIB_PROVIDER=package -DgRPC_SSL_PROVIDER=package -DgRPC_INSTALL=ON -DgRPC_INSTALL_LIBDIR=${OHOS_LIBDIR} -DgRPC_INSTALL_CMAKEDIR=${OHOS_LIBDIR}/cmake/grpc"
 pkg_build_cmake_extra_cmake_prefix_path=""
 pkg_build_cmake_extra_cflags=""
 # NOTE: C preprocessor not CXX
@@ -133,6 +133,7 @@ native_env_hook() {
 	fi
 
 	cmake -DCMAKE_VERBOSE_MAKEFILE=ON \
+		-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
 		-DgRPC_BUILD_TESTS=OFF \
 		-DCMAKE_CXX_STANDARD=17 \
 		-B ${grpc_native_src_root}/native-build -S ${grpc_native_src_root}
