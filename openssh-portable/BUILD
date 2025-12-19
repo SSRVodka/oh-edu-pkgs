@@ -12,17 +12,17 @@ setup() {
 # TODO: please fill in the variables for this package
 
 # [REQUIRED, NON-EMPTY, SEMVER]
-pkg_version=""
+pkg_version="10.2.1"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
-pkg_name=""
+pkg_name="openssh-portable"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps=""
+pkg_deps="libz>=1.0,libncursesw>=6.0,libreadline>=8.0,openssl>=3"
 # [OPTIONAL, seperated by commas, NO-SPACE]
 # NOTE: you need to add build deps "python3,python3-build,python3-setuptools" if you use setup_pycrossenv in hooks
-pkg_build_deps=""
+pkg_build_deps="libz>=1.0,libncursesw>=6.0,libreadline>=8.0,openssl>=3"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
-pkg_source_url=""
+pkg_source_url="https://github.com/openssh/openssh-portable/archive/refs/tags/V_10_2_P1.zip"
 # [OPTIONAL, VALID-URL]
 pkg_release_url=""
 ###################################################
@@ -36,18 +36,18 @@ pkg_support_archs="x86_64,aarch64,arm"
 #  - "custom" will skip the default build process
 #  - add "python3,python3-build,python3-wheel,python3-setuptools" to pkg_build_deps if you use "pure-python"
 #  - you may need to use setup_pycrossenv if you set pkg_build_type == "meson"
-pkg_build_type=""
+pkg_build_type="autotools"
 # [OPTIONAL]
 pkg_build_parallism=""
 
 ####### build type related (all OPTIONAL) #######
 
-pkg_build_autotools_extra_configure_flags=""
+pkg_build_autotools_extra_configure_flags="--without-shadow --with-privsep-path=/tmp/empty --with-privsep-user=sshd"
 # fill in a relative path to the ${current_source_root} (defined below)
 pkg_build_autotools_bootstrap_script=""
 pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
-pkg_build_autotools_make_install_target=""
+pkg_build_autotools_make_install_target="install-nokeys"
 
 pkg_build_cmake_extra_cmake_flags=""
 pkg_build_cmake_extra_cmake_prefix_path=""

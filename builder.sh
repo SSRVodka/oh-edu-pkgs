@@ -388,6 +388,7 @@ build() {
 
     case "x${pkg_build_type:-}" in
         xautotools)
+            # pkg_build_autotools_make_install_target maybe empty for old versions
             build_makeproj_with_deps \
                 "$target" \
                 "$deps_sep_space" \
@@ -396,6 +397,7 @@ build() {
                 "$pkg_build_autotools_suffix_configure_flags" \
                 "$pkg_build_parallism" \
                 "$pkg_build_autotools_configure_dir" \
+                "${pkg_build_autotools_make_install_target:-}" \
             || { error "build_makeproj_with_deps failed"; return 1; }
             ;;
         xcmake)

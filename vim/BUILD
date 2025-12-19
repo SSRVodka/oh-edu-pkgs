@@ -12,17 +12,17 @@ setup() {
 # TODO: please fill in the variables for this package
 
 # [REQUIRED, NON-EMPTY, SEMVER]
-pkg_version=""
+pkg_version="9.1.1989"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
-pkg_name=""
+pkg_name="vim"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps=""
+pkg_deps="libncursesw>=6,libreadline>=8,libgettext>=0.23,python3>=3.8"
 # [OPTIONAL, seperated by commas, NO-SPACE]
 # NOTE: you need to add build deps "python3,python3-build,python3-setuptools" if you use setup_pycrossenv in hooks
-pkg_build_deps=""
+pkg_build_deps="libncursesw>=6,libreadline>=8,libgettext>=0.23,python3>=3.8"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
-pkg_source_url=""
+pkg_source_url="https://github.com/vim/vim/archive/refs/tags/v9.1.1989.zip"
 # [OPTIONAL, VALID-URL]
 pkg_release_url=""
 ###################################################
@@ -36,17 +36,18 @@ pkg_support_archs="x86_64,aarch64,arm"
 #  - "custom" will skip the default build process
 #  - add "python3,python3-build,python3-wheel,python3-setuptools" to pkg_build_deps if you use "pure-python"
 #  - you may need to use setup_pycrossenv if you set pkg_build_type == "meson"
-pkg_build_type=""
+pkg_build_type="autotools"
 # [OPTIONAL]
 pkg_build_parallism=""
 
 ####### build type related (all OPTIONAL) #######
 
-pkg_build_autotools_extra_configure_flags=""
+pkg_build_autotools_extra_configure_flags="--enable-pythoninterp=yes --enable-python3interp=yes --with-python-command=python3 --with-python3-stable-abi=${PY_VERSION} --disable-gui --without-x --with-tlib=ncursesw"
 # fill in a relative path to the ${current_source_root} (defined below)
 pkg_build_autotools_bootstrap_script=""
-pkg_build_autotools_suffix_configure_flags=""
-pkg_build_autotools_configure_dir=""
+# NOTE: vim configure doesn't support --host/--target check
+pkg_build_autotools_suffix_configure_flags="--host=${OHOS_CPU}-linux-ohos --build=${BUILD_PLATFORM_TRIPLET} --target=${OHOS_CPU}-linux-ohos CC=${OHOS_CPU}-unknown-linux-ohos-clang CXX=${OHOS_CPU}-unknown-linux-ohos-clang++ AR=${AR} NM=${NM} LD=${LD} LDXX=${LDXX} STRIP=${STRIP} RANLIB=${RANLIB}"
+pkg_build_autotools_configure_dir="vim/src"
 pkg_build_autotools_make_install_target=""
 
 pkg_build_cmake_extra_cmake_flags=""
@@ -132,6 +133,13 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
+	export VIMRUNTIMEDIR=/data/vim/vim90
+	# patch OHOS_SDK fortify
+	export CPPFLAGS="${CPPFLAGS} -D_FORTIFY_SOURCE=0"
+	# patch idiot -ltinfow not in configure check
+	export LDFLAGS="${LDFLAGS} -L$(get_pkg_dst_dir libncursesw)/lib -lncursesw -ltinfow"
+	# patch source Makefile
+	sed -i "s|^\(CC=\)$|\1${OHOS_CPU}-unknown-linux-ohos-clang\nCPPFLAGS=${CPPFLAGS}\nCONF_ARGS=${pkg_build_autotools_extra_configure_flags} ${pkg_build_autotools_suffix_configure_flags}|" ${current_source_root}/src/Makefile
 	_custom_build_continue=true
 }
 

@@ -188,6 +188,7 @@ build_makeproj_with_deps() {
 	local suffix_configure_flags="${5:-}"
 	local make_parallism="${6:-}"
 	local configure_dir="${7:-${target_dir}}"
+	local make_install_target="${8:-install}"
 
 	local OLD_CFLAGS="$CFLAGS"
 	local OLD_CXXFLAGS="$CXXFLAGS"
@@ -254,7 +255,7 @@ build_makeproj_with_deps() {
 	#read -p "check >>> "
 	make -j${make_parallism} || { return 1; }
 	#read -p "check >>> "
-	make install || { return 1; }
+	make ${make_install_target} || { return 1; }
 
 	CFLAGS="$OLD_CFLAGS"
 	CXXFLAGS="$OLD_CXXFLAGS"
