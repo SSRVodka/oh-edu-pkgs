@@ -44,6 +44,7 @@ pkg_build_autotools_extra_configure_flags=""
 pkg_build_autotools_bootstrap_script=""
 pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
+pkg_build_autotools_make_install_target=""
 
 # NOTE: We will build the subprojects in ROS2 packages
 # override datadir for ROS2 installation: use liboctomap-dev as sysdeps instead of a ROS2 package

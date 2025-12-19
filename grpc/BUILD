@@ -47,6 +47,7 @@ pkg_build_autotools_extra_configure_flags=""
 pkg_build_autotools_bootstrap_script=""
 pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
+pkg_build_autotools_make_install_target=""
 
 pkg_build_cmake_extra_cmake_flags="-DOHOS_ALLOW_UNDEFINED_SYMBOLS=ON -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_CXX_STANDARD=17 -DABSL_PROPAGATE_CXX_STD=ON -DgRPC_ZLIB_PROVIDER=package -DgRPC_SSL_PROVIDER=package -DgRPC_INSTALL=ON -DgRPC_INSTALL_LIBDIR=${OHOS_LIBDIR} -DgRPC_INSTALL_CMAKEDIR=${OHOS_LIBDIR}/cmake/grpc"
 pkg_build_cmake_extra_cmake_prefix_path=""

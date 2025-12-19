@@ -44,6 +44,7 @@ pkg_build_autotools_extra_configure_flags=""
 pkg_build_autotools_bootstrap_script=""
 pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
+pkg_build_autotools_make_install_target=""
 
 pkg_build_cmake_extra_cmake_flags="-DBUILD_SHARED_LIBS=ON -S build/cmake -G Ninja"
 pkg_build_cmake_extra_cmake_prefix_path=""

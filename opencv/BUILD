@@ -42,6 +42,7 @@ pkg_build_autotools_extra_configure_flags=""
 pkg_build_autotools_bootstrap_script=""
 pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
+pkg_build_autotools_make_install_target=""
 
 pkg_build_cmake_extra_cmake_flags="-S opencv -DCMAKE_FIND_ROOT_PATH=${HOST_PYTHON_DIST} -DPYTHON_INCLUDE_DIRS=${HOST_PYTHON_DIST}/include -DPYTHON3_INCLUDE_PATH=${HOST_PYTHON_DIST}/include/python${PY_VERSION} -DPYTHON3_LIBRARIES=${HOST_PYTHON_DIST}/${OHOS_LIBDIR}/libpython${PY_VERSION}.so -DPYTHON3_NUMPY_INCLUDE_DIRS=${NUMPY2_LIBROOT}/include"
 pkg_build_cmake_extra_cmake_prefix_path=""

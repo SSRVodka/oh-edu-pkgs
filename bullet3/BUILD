@@ -44,6 +44,7 @@ pkg_build_autotools_extra_configure_flags=""
 pkg_build_autotools_bootstrap_script=""
 pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
+pkg_build_autotools_make_install_target=""
 
 pkg_build_cmake_extra_cmake_flags="-DBUILD_PYBULLET=ON -DBUILD_PYBULLET_NUMPY=ON -DUSE_DOUBLE_PRECISION=ON -DBT_USE_EGL=ON -DPYTHON_INCLUDE_DIR=$(get_pkg_dst_dir python3)/include/python${PY_VERSION} -DPYTHON_LIBRARY=$(get_pkg_dst_dir python3)/${OHOS_LIBDIR}/libpython3.so -DPYTHON_NUMPY_INCLUDE_DIR=${NUMPY2_LIBROOT}/include -DPYTHON_NUMPY_VERSION=2.3.1"
 pkg_build_cmake_extra_cmake_prefix_path=""

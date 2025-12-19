@@ -44,6 +44,7 @@ pkg_build_autotools_extra_configure_flags=""
 pkg_build_autotools_bootstrap_script=""
 pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
+pkg_build_autotools_make_install_target=""
 
 pkg_build_cmake_extra_cmake_flags="-D BUILD_SHARED_LIBS=ON -D SPIRV_WERROR=OFF -D SPIRV-Headers_SOURCE_DIR=$(get_pkg_dst_dir SPIRV-Headers)"
 pkg_build_cmake_extra_cmake_prefix_path=""
