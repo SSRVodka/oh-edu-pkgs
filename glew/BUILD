@@ -16,10 +16,10 @@ pkg_version="2.2.0"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
 pkg_name="glew"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps="mesa>=25.0"
+pkg_deps="mesa>=25.0,xorg"
 # [OPTIONAL, seperated by commas, NO-SPACE]
 # NOTE: you need to add build deps "python3,python3-build,python3-setuptools" if you use setup_pycrossenv in hooks
-pkg_build_deps="mesa>=25.0"
+pkg_build_deps="mesa>=25.0,xorg"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://github.com/nigels-com/glew/releases/download/glew-2.2.0/glew-2.2.0.tgz"

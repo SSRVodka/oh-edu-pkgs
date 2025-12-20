@@ -12,7 +12,7 @@ setup() {
 # TODO: please fill in the variables for this package
 
 # [REQUIRED, NON-EMPTY, SEMVER]
-pkg_version="1.73.0"
+pkg_version="1.74.1"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
 pkg_name="grpc"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
