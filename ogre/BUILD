@@ -150,7 +150,8 @@ custom_build() {
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	:
+	# patch OgreTargets.cmake to avoid linker pollutions
+	sed -i "s|^\([[:space:]]*INTERFACE_LINK_LIBRARIES \"OgreMain;\).*|\1\${_IMPORT_PREFIX}/${OHOS_LIBDIR}/libSM.so;\${_IMPORT_PREFIX}/${OHOS_LIBDIR}/libICE.so;\${_IMPORT_PREFIX}/${OHOS_LIBDIR}/libX11.so;\${_IMPORT_PREFIX}/${OHOS_LIBDIR}/libXext.so;\${_IMPORT_PREFIX}/${OHOS_LIBDIR}/libXrandr.so;\${_IMPORT_PREFIX}/${OHOS_LIBDIR}/libGL.so\"|" ${target_root_with_pkgname}/${OHOS_LIBDIR}/OGRE/cmake/OgreTargets.cmake
 }
 
 ################ self-defined functions (local) goes below ################
