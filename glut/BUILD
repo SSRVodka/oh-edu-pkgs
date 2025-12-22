@@ -12,16 +12,17 @@ setup() {
 # TODO: please fill in the variables for this package
 
 # [REQUIRED, NON-EMPTY, SEMVER]
-pkg_version="2.4.127"
+pkg_version="3.6.0"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
-pkg_name="libdrm"
+pkg_name="glut"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps=""
+pkg_deps="mesa>=25,xorg,glu>=9"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="python3,python3-build,python3-setuptools"
+# NOTE: you need to add build deps "python3,python3-build,python3-setuptools" if you use setup_pycrossenv in hooks
+pkg_build_deps="mesa>=25,xorg,glu>=9"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
-pkg_source_url="https://dri.freedesktop.org/libdrm/libdrm-2.4.127.tar.xz"
+pkg_source_url="https://github.com/freeglut/freeglut/archive/refs/tags/v3.6.0.zip"
 # [OPTIONAL, VALID-URL]
 pkg_release_url=""
 ###################################################
@@ -33,7 +34,9 @@ pkg_support_archs="x86_64,aarch64,arm"
 # NOTE:
 #  - "pure-python" is ONLY valid for those packages without ANY native package dependency.
 #  - "custom" will skip the default build process
-pkg_build_type="meson"
+#  - add "python3,python3-build,python3-wheel,python3-setuptools" to pkg_build_deps if you use "pure-python"
+#  - you may need to use setup_pycrossenv if you set pkg_build_type == "meson"
+pkg_build_type="cmake"
 # [OPTIONAL]
 pkg_build_parallism=""
 
@@ -46,7 +49,7 @@ pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
 pkg_build_autotools_make_install_target=""
 
-pkg_build_cmake_extra_cmake_flags=""
+pkg_build_cmake_extra_cmake_flags="-DCMAKE_INSTALL_LIBDIR=${OHOS_LIBDIR}"
 pkg_build_cmake_extra_cmake_prefix_path=""
 pkg_build_cmake_extra_cflags=""
 # NOTE: C preprocessor not CXX
@@ -54,9 +57,9 @@ pkg_build_cmake_extra_cppflags=""
 pkg_build_cmake_extra_ldflags=""
 pkg_build_cmake_extra_cmake_findroot_path=""
 
-# fill in a relative path to this script
-pkg_build_meson_cross_file="${MESON_CROSS_FILE_BASE}"
-pkg_build_meson_extra_meson_flags="-Dvalgrind=disabled"
+# fill in a absolute path
+pkg_build_meson_cross_file=""
+pkg_build_meson_extra_meson_flags=""
 pkg_build_meson_extra_cflags=""
 pkg_build_meson_extra_ldflags=""
 pkg_build_meson_extra_cmake_prefix_path=""
@@ -93,7 +96,7 @@ pkg_build_meson_extra_cmake_findroot_path=""
 # Hook: called before setup.sh is sourced
 # NOTE:
 #  - failure in this function will terminate this script immediately
-#  - you can NOT use local variables defined above. you can only use ${native_project_root}, ${native_sources_root} built by builder.sh
+#  - you can NOT use local variables defined above. you can only use ${native_project_root}, ${native_sources_root}, ${native_dst_root} built by builder.sh
 native_env_hook() {
 	:
 }
@@ -129,19 +132,12 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
-	# patch meson script to use build-python on host machine
-	reset_meson $MESON_CROSS_FILE_BASE
-	sed -i "s|^\(python[[:space:]]*=[[:space:]]*\).*|\1'${BUILD_PYTHON}'|" $MESON_CROSS_FILE_BASE
-	# enter build env
-	setup_pycrossenv
-	# ensure meson
-	build-pip install meson
 	_custom_build_continue=true
 }
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	destroy_pycrossenv || true
+	:
 }
 
 ################ self-defined functions (local) goes below ################

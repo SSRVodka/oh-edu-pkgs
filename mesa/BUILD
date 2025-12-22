@@ -123,7 +123,7 @@ prebuilt_patch_hook() {
 	BUILDTIME_PY=$(which build-python)
 	sed -i "s|^\(python[[:space:]]*=[[:space:]]*\).*|\1'${BUILDTIME_PY}'|" $MESON_CROSS_FILE_BASE
 	# using build-time (not runtime) python on the host machine
-	build-pip install packaging mako pyyaml
+	build-pip install packaging mako pyyaml meson
 
 	# patch meson for ohos
 	sed -i -e "\|ohos|! s|^\(system_has_kms_drm[[:space:]]*=[[:space:]]*.*'linux',[[:space:]]*\)\('sunos',.*\)$|\1'ohos', \2|" \

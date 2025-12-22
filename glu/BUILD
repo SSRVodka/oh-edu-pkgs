@@ -137,6 +137,8 @@ custom_build() {
 
 	# enter build env
 	setup_pycrossenv
+	# ensure meson
+	build-pip install meson
 	_custom_build_continue=true
 }
 
