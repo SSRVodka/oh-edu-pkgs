@@ -42,11 +42,12 @@ pkg_build_parallism=""
 
 ####### build type related (all OPTIONAL) #######
 
-pkg_build_autotools_extra_configure_flags="--enable-pythoninterp=yes --enable-python3interp=yes --with-python-command=python3 --with-python3-stable-abi=${PY_VERSION} --disable-gui --without-x --with-tlib=ncursesw"
+pkg_build_autotools_extra_configure_flags="--enable-pythoninterp=yes --enable-python3interp=yes --with-python-command=python3 --with-python3-stable-abi=${PY_VERSION} --with-python3-config-dir=$(get_pkg_dst_dir python3)/${OHOS_LIBDIR}/python${PY_VERSION}/config-${PY_VERSION}-${OHOS_CPU}-linux-ohos --disable-gui --without-x --with-tlib=ncursesw"
 # fill in a relative path to the ${current_source_root} (defined below)
 pkg_build_autotools_bootstrap_script=""
 # NOTE: vim configure doesn't support --host/--target check
-pkg_build_autotools_suffix_configure_flags="--host=${OHOS_CPU}-linux-ohos --build=${BUILD_PLATFORM_TRIPLET} --target=${OHOS_CPU}-linux-ohos CC=${OHOS_CPU}-unknown-linux-ohos-clang CXX=${OHOS_CPU}-unknown-linux-ohos-clang++ AR=${AR} NM=${NM} LD=${LD} LDXX=${LDXX} STRIP=${STRIP} RANLIB=${RANLIB}"
+pkg_build_autotools_suffix_configure_flags="--host=${OHOS_CPU}-linux-ohos --build=${BUILD_PLATFORM_TRIPLET} --target=${OHOS_CPU}-linux-ohos AR=${AR} NM=${NM} LD=${LD} LDXX=${LDXX} STRIP=${STRIP} RANLIB=${RANLIB} ac_cv_path_vi_cv_path_python3=python3 vi_cv_path_python3=python3 vi_cv_var_python3_version=${PY_VERSION} vi_cv_path_python3_pfx=$(get_pkg_dst_dir python3) vi_cv_path_python3_include=$(get_pkg_dst_dir python3)/include/python${PY_VERSION} vi_cv_path_python3_platinclude=$(get_pkg_dst_dir python3)/include/python${PY_VERSION} vi_cv_dll_name_python3=libpython${PY_VERSION}.so"
+#pkg_build_autotools_suffix_configure_flags="--host=${OHOS_CPU}-linux-ohos --build=${BUILD_PLATFORM_TRIPLET} --target=${OHOS_CPU}-linux-ohos"
 pkg_build_autotools_configure_dir="vim/src"
 pkg_build_autotools_make_install_target=""
 
@@ -135,11 +136,13 @@ prebuilt_patch_once_hook() {
 custom_build() {
 	export VIMRUNTIMEDIR=/data/vim/vim90
 	# patch OHOS_SDK fortify
-	export CPPFLAGS="${CPPFLAGS} -D_FORTIFY_SOURCE=0"
+	export CFLAGS="-nostdinc -isystem ${HOST_SYSROOT}/usr/include -isystem ${HOST_SYSROOT}/usr/include/${OHOS_CPU}-linux-ohos --target=${OHOS_CPU}-linux-ohos --sysroot=${HOST_SYSROOT} ${CFLAGS}"
+	export CXXFLAGS="--target=${OHOS_CPU}-linux-ohos --sysroot=${HOST_SYSROOT} ${CXXFLAGS}"
+	export CPPFLAGS="--target=${OHOS_CPU}-linux-ohos --sysroot=${HOST_SYSROOT} ${CPPFLAGS} -D_FORTIFY_SOURCE=0"
 	# patch idiot -ltinfow not in configure check
 	export LDFLAGS="${LDFLAGS} -L$(get_pkg_dst_dir libncursesw)/lib -lncursesw -ltinfow"
 	# patch source Makefile
-	sed -i "s|^\(CC=\)$|\1${OHOS_CPU}-unknown-linux-ohos-clang\nCPPFLAGS=${CPPFLAGS}\nCONF_ARGS=${pkg_build_autotools_extra_configure_flags} ${pkg_build_autotools_suffix_configure_flags}|" ${current_source_root}/src/Makefile
+	sed -i "s|^\(CC=\)$|\1clang\nCFLAGS=${CFLAGS}\nCPPFLAGS=${CPPFLAGS}\nCONF_ARGS=${pkg_build_autotools_extra_configure_flags} ${pkg_build_autotools_suffix_configure_flags}|" ${current_source_root}/src/Makefile
 	_custom_build_continue=true
 }
 

@@ -39,6 +39,8 @@ pkg_support_archs="x86_64,aarch64,arm"
 pkg_build_type=""
 # [OPTIONAL]
 pkg_build_parallism=""
+# [OPTIONAL: empty or Y]
+pkg_force_clean_build=""
 
 ####### build type related (all OPTIONAL) #######
 

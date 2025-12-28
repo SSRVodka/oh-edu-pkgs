@@ -123,7 +123,10 @@ prebuilt_patch_hook() {
 # Hook: same as `prebuilt_patch_hook` but executed once if the source directory is not changed (mark file PATCHED)
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
-	:
+	pushd ${current_source_root}
+	patch -p1 --dry-run < ${PATCH_FILE_ROOT}/oh-gdb.patch
+	patch -p1 < ${PATCH_FILE_ROOT}/oh-gdb.patch
+	popd
 }
 
 # Hook: customize building process.

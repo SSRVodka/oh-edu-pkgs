@@ -85,11 +85,13 @@ mv_pkg_to_dst_dir() {
 PKG_VARS=(
     pkg_version pkg_name pkg_deps pkg_build_deps pkg_source_url pkg_release_url
     pkg_license pkg_support_archs pkg_build_type pkg_build_parallism
+    pkg_force_clean_build
 )
 
 AUTOTOOLS_VARS=(
     pkg_build_autotools_extra_configure_flags pkg_build_autotools_bootstrap_script
     pkg_build_autotools_suffix_configure_flags pkg_build_autotools_configure_dir
+    pkg_build_autotools_make_install_target
 )
 
 CMAKE_VARS=(
@@ -470,7 +472,10 @@ build_package() {
     target_root_prefix_without_pkgname="${TARGET_ROOT}"
     target_root_with_pkgname="$(get_pkg_dst_dir $pkg_name)"
 
-    # download if ${current_source_root} doesn't exist
+    # download if ${current_source_root} doesn't exist or flushed using optional pkg_force_clean_build
+    if [ -n "${pkg_force_clean_build:-}" ]; then
+        rm -rf "${current_source_root}"
+    fi
     if [ ! -d "${current_source_root}" ]; then
         download || { error "download for '$build_file' failed"; restore_xcompile_flags; clear_vars; return 1; }
     fi
