@@ -1,0 +1,30 @@
+--- netifaces.c	2021-05-31 15:26:39.000000000 +0800
++++ netifaces.c.oh	2025-12-29 21:14:29.720065818 +0800
+@@ -368,9 +368,11 @@
+     gniaddr = addr;
+   }
+ 
++  // SSRVODKA: fix using https://gitweb.gentoo.org/repo/gentoo.git/commit/?id=2f12d5a41f4c84db8a8abe77c4572f340f5724a6
++  // related report: https://bugs.gentoo.org/894448
+   failure = getnameinfo (gniaddr, gnilen,
+                          buffer, buflen,
+-                         NULL, 0,
++                         0, 0,
+                          NI_NUMERICHOST);
+ 
+   if (bigaddr) {
+@@ -1800,12 +1802,13 @@
+     do {
+       struct sockaddr_nl sanl_from;
+       struct iovec iov = { msgbuf, bufsize };
++      // SSRVODKA FIX
+       struct msghdr msghdr = {
+         &sanl_from,
+         sizeof(sanl_from),
+         &iov,
+         1,
+-        NULL,
++        0,
+         0,
+         0
+       };

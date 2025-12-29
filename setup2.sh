@@ -634,6 +634,8 @@ exit_pycrossenv() {
 	deactivate
 }
 
+# prepare meson in host env
+pip install meson
 
 if [ ! -d ${CUR_DIR}/meson-scripts ]; then
     warn "cannot find meson template directory: ${CUR_DIR}/meson-scripts"
