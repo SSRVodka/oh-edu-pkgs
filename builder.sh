@@ -137,6 +137,7 @@ save_xcompile_flags() {
     _presetup_pkg_config_path=${PKG_CONFIG_PATH:-}
     _presetup_pkg_config_libdir=${PKG_CONFIG_LIBDIR:-}
     _presetup_pkg_config_sysign=${PKG_CONFIG_SYSTEM_IGNORE_PATH:-}
+    _presetup_destdir=${DESTDIR:-}
 }
 restore_xcompile_flags() {
     # restore flags (failure prune: we've already setup trap in setup.sh)
@@ -162,6 +163,7 @@ restore_xcompile_flags() {
     PKG_CONFIG_PATH=$_presetup_pkg_config_path
     PKG_CONFIG_LIBDIR=$_presetup_pkg_config_libdir
     PKG_CONFIG_SYSTEM_IGNORE_PATH=$_presetup_pkg_config_sysign
+    DESTDIR=$_presetup_destdir
 }
 
 validate_config() {
