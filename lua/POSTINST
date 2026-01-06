@@ -1,0 +1,13 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+_prefix=${1:-}
+if [ -z "$_prefix" ]; then
+    echo "ERROR: empty prefix in 1st parameter"
+    exit 1
+fi
+
+sed -i "s|\(#define LUA_ROOT[[:space:]]*\).*|\1\"${_prefix}\"|" $_prefix/include/luaconf.h
+
+echo "lua is installed at '$_prefix'"
+

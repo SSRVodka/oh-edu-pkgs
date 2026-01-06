@@ -27,9 +27,7 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 
 如果您想要测试该补丁框架能否正确编译，暂时不想使用 ohloha 管理，您可以使用本仓库的 `test-build-*.sh` 系列脚本。执行这些脚本（任意一个）后会开始按预设的顺序依次编译。例如 `test-build-opencv-and-deps.sh` 会按顺序编译 opencv 和所需的依赖库并输出到 `dist.<arch>.*`；
 
-### 迁移和编译指南
-
-如需配置架构，请参考注释修改 `setup2.sh` 的 `OHOS_CPU` 和 `OHOS_ARCH` 定义，或者调用 `builder.sh` 时指定 `--cpu` 参数（可选 `aarch64/arm/x86_64`）即可。
+### 添加 (向 OH 迁移) 新的库
 
 请使用 `./pkgs-create.sh` 从模板创建一个迁移工具。举例：
 
@@ -46,3 +44,39 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 注意，`builder.sh` 本身不会管理依赖图，`ohloha` [包管理器](https://gitcode.com/openharmony-robot/tools_ohloha) 会管理并生成指令调用 `builder.sh` 构建这些包。
 
 您在测试时可以按照依赖关系这样依次构建（按拓扑序方向从前到后）：`./builder.sh dep1/BUILD dep2/BUILD dep3/BUILD foo/BUILD`；
+
+> [!TIP]
+>
+> FAQ：如何确定一个库的 `pkg_deps / pkg_build_deps`？
+>
+> 这个工作其实应该由编写这个库的开发者决定的，因此您在迁移时需要到被迁移库的源码仓库里自行查找依赖。一般会文档里（例如 build from source 的文档）。假设想要迁移库 A，整体流程如下：
+>
+> 1. 到 A 的源码仓库 / 文档查找 A 的编译时、运行时依赖，假设都是 B、C、D；
+> 2. 依次检查 B、C、D 是否已经被迁移完成（已经存在 `ohloha_pkgs` 里面了）；
+>    - 如果是，直接在 `pkg_deps / pkg_build_deps` 里面添加即可；
+>    - 如果否，需要您递归地迁移这些依赖（对 B/C/D 从第一步开始迁移）；
+> 3. 填写完 `pkg_deps` 和 `pkg_build_deps` 后，您应该尝试
+
+> [!TIP]
+>
+> FAQ：如何确定一个库的 `pkg_build_type`？
+>
+> 同样由编写这个库的开发者决定的，这主要是因为目前 C/C++ 库的构建工具繁多但不统一导致的。
+>
+> 举个例子，您应该到被迁移的库的源码仓中检查，如果它的编译工具支持 `cmake`（文档里说可以这么编译，或者包含 `CMakeLists.txt`），那么就是 `cmake` 类型；如果源码仓使用 `configure` 和 `Makefile`，那么就是 `autotools` 类型；如果源码仓使用 `meson.build`，那么就是 `meson` 类型，依此类推。
+>
+> 对于不同的 `pkg_build_type`，`builder.sh` 内置了不同的交叉编译构建流程，对于一般的库，方便您不需要设置一些交叉编译的繁琐 flags 就能直接使用。内置默认逻辑如下：
+>
+> 首先执行 hook `custom_build`，如果用户最后设置了 `_custom_build_continue=false`，那么直接结束构建。否则执行下面的逻辑：
+>
+> - `cmake` 构建类型的库：自动按照依赖关系设置 `CMAKE_PREFIX_PATH / CMAKE_FIND_ROOT_PATH`、C/C++/LD flags、`PKG_CONFIG_DIR` 等等，并使用 `ohos.toolchain.xhw.cmake` 工具链定义开始构建；
+> - `autotools` 构建类型的库：自动按照依赖关系为 `configure` 设置 `--prefix / --host / --target / --build / --libdir` 等参数、C/C++/LD flags、各种 compilers 环境变量、`PKG_CONFIG_DIR` 等等，并使用 `make` 构建和安装；
+> - `meson` 构建类型的库：自动设置 meson 交叉工具链模板文件 `meson-scripts/ohos-build.meson.template`，并使用 host 上的 `meson` 启动构建；
+> - `pure_python` 构建类型的库：进入预先准备的 `crossenv`，使用 `pip install --no-binary :all:` 的 prefix 构建；
+> - `custom` 构建类型的库：不做任何处理；
+>
+> 如果您希望彻底从头定制构建流程、管理依赖等等，或者有些库的编译流程，不希望依赖 `builder.sh` 内部的构建逻辑，您可以使用 `custom` 构建类型，并且在 `BUILD` 文件的 `custom_build` 函数中进行自定义流程。更多要求请参见 `.template/BUILD` 中的注释内容。
+
+### 编译时注意事项
+
+如需配置编译目标架构，调用 `builder.sh` 时指定 `--cpu` 参数（可选 `aarch64/arm/x86_64`）即可，或者请参考注释修改 `setup2.sh` 的 `OHOS_CPU` 和 `OHOS_ARCH` 定义；
