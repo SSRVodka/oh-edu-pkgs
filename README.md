@@ -55,7 +55,7 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 > 2. 依次检查 B、C、D 是否已经被迁移完成（已经存在 `ohloha_pkgs` 里面了）；
 >    - 如果是，直接在 `pkg_deps / pkg_build_deps` 里面添加即可；
 >    - 如果否，需要您递归地迁移这些依赖（对 B/C/D 从第一步开始迁移）；
-> 3. 填写完 `pkg_deps` 和 `pkg_build_deps` 后，您应该尝试
+> 3. 填写完 `pkg_deps` 和 `pkg_build_deps` 后，您应该先用 `builder.sh` 测试构建能否成功（依赖自行管理，如 `./builder.sh B/BUILD C/BUILD D/BUILD A/BUILD`），如果有问题则调整相应的 flags 和选项，直至编译成功，方可提交 PR；
 
 > [!TIP]
 >

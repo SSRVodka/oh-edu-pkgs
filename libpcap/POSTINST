@@ -1,0 +1,20 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+_prefix=${1:-}
+
+# Post-installation script for libpcap
+# Usually no special post-installation steps are needed for libpcap
+
+if [ -z "$_prefix" ]; then
+    echo "ERROR: install prefix not provided"
+    exit 1
+fi
+
+# You can add any post-installation operations here if needed
+# For example:
+# - Setting up symlinks
+# - Generating library cache
+# - Setting permissions
+
+echo "libpcap post-installation completed for ${_prefix}"
