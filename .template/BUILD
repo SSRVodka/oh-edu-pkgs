@@ -35,6 +35,7 @@ pkg_support_archs="x86_64,aarch64,arm"
 #  - "pure-python" is ONLY valid for those packages without ANY native package dependency.
 #  - "custom" will skip the default build process
 #  - add "python3,python3-build,python3-wheel,python3-setuptools" to pkg_build_deps if you use "pure-python"
+#  - add "python3" to pkg_build_deps if you use "meson"
 #  - you are responsible to set setup_pycrossenv if you set pkg_build_type == "meson", ensure meson, and use destroy_pycrossenv before finishing building this package.
 pkg_build_type=""
 # [OPTIONAL]

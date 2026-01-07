@@ -70,12 +70,26 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 > 首先执行 hook `custom_build`，如果用户最后设置了 `_custom_build_continue=false`，那么直接结束构建。否则执行下面的逻辑：
 >
 > - `cmake` 构建类型的库：自动按照依赖关系设置 `CMAKE_PREFIX_PATH / CMAKE_FIND_ROOT_PATH`、C/C++/LD flags、`PKG_CONFIG_DIR` 等等，并使用 `ohos.toolchain.xhw.cmake` 工具链定义开始构建；
+>
 > - `autotools` 构建类型的库：自动按照依赖关系为 `configure` 设置 `--prefix / --host / --target / --build / --libdir` 等参数、C/C++/LD flags、各种 compilers 环境变量、`PKG_CONFIG_DIR` 等等，并使用 `make` 构建和安装；
-> - `meson` 构建类型的库：自动设置 meson 交叉工具链模板文件 `meson-scripts/ohos-build.meson.template`，并使用 host 上的 `meson` 启动构建；
+>
+> - `meson` 构建类型的库：自动设置 meson 交叉工具链模板文件 `meson-scripts/*`，并使用 host 上的 `meson` 启动构建；
+>
+>   你需要使用时手动指定 `pkg_build_meson_cross_file` 为修改后的 `*.meson` 文件，例如 `${MESON_CROSS_FILE_BASE}`；
+>
 > - `pure_python` 构建类型的库：进入预先准备的 `crossenv`，使用 `pip install --no-binary :all:` 的 prefix 构建；
+>
 > - `custom` 构建类型的库：不做任何处理；
 >
 > 如果您希望彻底从头定制构建流程、管理依赖等等，或者有些库的编译流程，不希望依赖 `builder.sh` 内部的构建逻辑，您可以使用 `custom` 构建类型，并且在 `BUILD` 文件的 `custom_build` 函数中进行自定义流程。更多要求请参见 `.template/BUILD` 中的注释内容。
+>
+> 最后，如果您还是不知如何编写，可以参考本仓库里典型的案例的写法。例如：
+>
+> - `meson` 类型：`libdrm/BUILD`、`mesa/BUILD` 等；
+> - `custom` 类型：`boost/BUILD`、`xorg/BUILD` 等；
+> - `cmake` 类型：`grpc/BUILD`、`zstd/BUILD` 等；
+> - `autotools` 类型：`util-linux/BUILD`、`libncursesw/BUILD` 等；
+> - `pure-python` 类型：`python3-build`、`python3-setuptools` 等；
 
 ### 编译时注意事项
 

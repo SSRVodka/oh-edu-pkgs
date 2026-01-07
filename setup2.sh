@@ -367,7 +367,7 @@ build_cmakeproj_with_deps() {
 build_mesonproj_with_deps() {
 	local target_dir=$1
 	local deps=${2:-}
-	local meson_cross_file=${3:-}
+	local meson_cross_file=${3:-${MESON_CROSS_FILE_BASE}}
 	local _my_extra_meson_flags=${4:-}
 	local parallism=${5:-20}
 	local _my_extra_cflags=${6:-}
