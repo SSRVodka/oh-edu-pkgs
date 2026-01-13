@@ -11,3 +11,5 @@ apt install -y cmake
 apt install -y glslang-tools
 # fontconfig deps
 apt install -y gperf
+# openjdk deps: use same jdk version as bootstrap JDK; no libstdc++-12-dev to avoid using default glibc
+apt install -y openjdk-21-jdk libc6-dev libc++-12-dev libc++abi-12-dev clang llvm lldb lld

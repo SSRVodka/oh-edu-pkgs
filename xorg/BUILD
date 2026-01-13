@@ -113,7 +113,7 @@ custom_download_source() {
 	
 	wget_source https://www.x.org/pub/individual/util/util-macros-1.20.2.tar.xz "${current_source_root}/util-macros"
 	wget_source https://xorg.freedesktop.org/archive/individual/proto/xcb-proto-1.17.0.tar.xz "${current_source_root}/xcb-proto"
-	wget_source https://xorg.freedesktop.org/archive/individual/proto/xorgproto-2024.1.tar.xz "${current_source_root}/xorgproto"
+	wget_source https://xorg.freedesktop.org/archive/individual/proto/xorgproto-2025.1.tar.xz "${current_source_root}/xorgproto"
 	wget_source https://www.x.org/pub/individual/lib/libXau-1.0.12.tar.xz "${current_source_root}/libXau"
 	wget_source https://xorg.freedesktop.org/archive/individual/lib/libxcb-1.17.0.tar.xz "${current_source_root}/libxcb"
 	
@@ -149,11 +149,11 @@ ca55d29fa0a8b5c4a89f609a7952ebf8  libXdamage-1.1.6.tar.xz
 8816cc44d06ebe42e85950b368185826  libfontenc-1.1.8.tar.xz
 66e03e3405d923dfaf319d6f2b47e3da  libXfont2-2.0.7.tar.xz
 d378be0fcbd1f689f9a132e0d642bc4b  libXft-2.3.9.tar.xz
-# 95a960c1692a83cc551979f7ffe28cf4  libXi-1.8.2.tar.xz
-# 228c877558c265d2f63c56a03f7d3f21  libXinerama-1.1.5.tar.xz
+95a960c1692a83cc551979f7ffe28cf4  libXi-1.8.2.tar.xz
+228c877558c265d2f63c56a03f7d3f21  libXinerama-1.1.5.tar.xz
 24e0b72abe16efce9bf10579beaffc27  libXrandr-1.5.4.tar.xz
 5014282a08b54ec0edfa73c5cf9ae2c1  libXres-1.2.3.tar.xz
-# b62dc44d8e63a67bb10230d54c44dcb7  libXtst-1.2.5.tar.xz
+b62dc44d8e63a67bb10230d54c44dcb7  libXtst-1.2.5.tar.xz
 8a26503185afcb1bbd2c65e43f775a67  libXv-1.0.13.tar.xz
 a90a5f01102dc445c7decbbd9ef77608  libXvMC-1.0.14.tar.xz
 74d1acf93b83abeb0954824da0ec400b  libXxf86dga-1.1.6.tar.xz
@@ -181,57 +181,57 @@ EOF
 	done
 	
 	popd
-
-	# proto headers
-	
-	pushd xprotos
-
-cat > $XPROTOS_MD5_FN << "EOF"
-# 1a05fb01fa1d5198894c931cf925c025  bigreqsproto-1.1.2.tar.bz2
-# 98482f65ba1e74a08bf5b056a4031ef0  compositeproto-0.4.2.tar.bz2
-# 998e5904764b82642cc63d97b4ba9e95  damageproto-1.2.1.tar.bz2
-# 4ee175bbd44d05c34d43bb129be5098a  dmxproto-2.3.1.tar.bz2
-b2721d5d24c04d9980a0c6540cb5396a  dri2proto-2.8.tar.bz2
-# a3d2cbe60a9ca1bf3aea6c93c817fee3  dri3proto-1.0.tar.bz2
-# e7431ab84d37b2678af71e29355e101d  fixesproto-5.0.tar.bz2
-# 36934d00b00555eaacde9f091f392f97  fontsproto-2.1.3.tar.bz2
-5565f1b0facf4a59c2778229c1f70d10  glproto-1.4.17.tar.bz2
-b290a463af7def483e6e190de460f31a  inputproto-2.3.2.tar.bz2
-94afc90c1f7bef4a27fdd59ece39c878  kbproto-1.0.7.tar.bz2
-# 92f9dda9c870d78a1d93f366bcb0e6cd  presentproto-1.1.tar.bz2
-a46765c8dcacb7114c821baf0df1e797  randrproto-1.5.0.tar.bz2
-# 1b4e5dede5ea51906f1530ca1e21d216  recordproto-1.14.2.tar.bz2
-a914ccc1de66ddeb4b611c6b0686e274  renderproto-0.11.1.tar.bz2
-# cfdb57dae221b71b2703f8e2980eaaf4  resourceproto-1.2.0.tar.bz2
-# edd8a73775e8ece1d69515dd17767bfb  scrnsaverproto-1.2.2.tar.bz2
-# fe86de8ea3eb53b5a8f52956c5cd3174  videoproto-2.3.3.tar.bz2
-# 5f4847c78e41b801982c8a5e06365b24  xcmiscproto-1.2.2.tar.bz2
-70c90f313b4b0851758ef77b95019584  xextproto-7.3.0.tar.bz2
-# 120e226ede5a4687b25dd357cc9b8efe  xf86bigfontproto-1.2.0.tar.bz2
-# a036dc2fcbf052ec10621fd48b68dbb1  xf86dgaproto-2.1.tar.bz2
-1d716d0dac3b664e5ee20c69d34bc10e  xf86driproto-2.1.1.tar.bz2
-e793ecefeaecfeabd1aed6a01095174e  xf86vidmodeproto-2.3.1.tar.bz2
-# 9959fe0bfb22a0e7260433b8d199590a  xineramaproto-1.2.1.tar.bz2
-16791f7ca8c51a20608af11702e51083  xproto-7.0.31.tar.bz2
-EOF
-
-	grep -v '^#' $XPROTOS_MD5_FN | awk '{print $2}' | wget -i- -c \
-	    -B https://www.x.org/pub/individual/proto/ &&
-	md5sum -c $XPROTOS_MD5_FN
-	
-	local protf_list=$(grep -v '^#' $XPROTOS_MD5_FN | awk '{print $2}')
-	for tf in $protf_list; do
-		name_with_version="${tf%%.tar*}"
-		proto_name="${name_with_version%-*}"
-		# version="${name_with_version##*-}"
-		tar -xpvf $tf
-		mv $name_with_version $proto_name
-		rm $tf
-		echo $proto_name >> $LIBNAME_LIST
-	done
-	
-	popd
-
+#
+#	# proto headers
+#	
+#	pushd xprotos
+#
+#cat > $XPROTOS_MD5_FN << "EOF"
+## 1a05fb01fa1d5198894c931cf925c025  bigreqsproto-1.1.2.tar.bz2
+## 98482f65ba1e74a08bf5b056a4031ef0  compositeproto-0.4.2.tar.bz2
+## 998e5904764b82642cc63d97b4ba9e95  damageproto-1.2.1.tar.bz2
+## 4ee175bbd44d05c34d43bb129be5098a  dmxproto-2.3.1.tar.bz2
+#b2721d5d24c04d9980a0c6540cb5396a  dri2proto-2.8.tar.bz2
+## a3d2cbe60a9ca1bf3aea6c93c817fee3  dri3proto-1.0.tar.bz2
+## e7431ab84d37b2678af71e29355e101d  fixesproto-5.0.tar.bz2
+## 36934d00b00555eaacde9f091f392f97  fontsproto-2.1.3.tar.bz2
+#5565f1b0facf4a59c2778229c1f70d10  glproto-1.4.17.tar.bz2
+#b290a463af7def483e6e190de460f31a  inputproto-2.3.2.tar.bz2
+#94afc90c1f7bef4a27fdd59ece39c878  kbproto-1.0.7.tar.bz2
+## 92f9dda9c870d78a1d93f366bcb0e6cd  presentproto-1.1.tar.bz2
+#a46765c8dcacb7114c821baf0df1e797  randrproto-1.5.0.tar.bz2
+#1b4e5dede5ea51906f1530ca1e21d216  recordproto-1.14.2.tar.bz2
+#a914ccc1de66ddeb4b611c6b0686e274  renderproto-0.11.1.tar.bz2
+## cfdb57dae221b71b2703f8e2980eaaf4  resourceproto-1.2.0.tar.bz2
+## edd8a73775e8ece1d69515dd17767bfb  scrnsaverproto-1.2.2.tar.bz2
+## fe86de8ea3eb53b5a8f52956c5cd3174  videoproto-2.3.3.tar.bz2
+## 5f4847c78e41b801982c8a5e06365b24  xcmiscproto-1.2.2.tar.bz2
+#70c90f313b4b0851758ef77b95019584  xextproto-7.3.0.tar.bz2
+## 120e226ede5a4687b25dd357cc9b8efe  xf86bigfontproto-1.2.0.tar.bz2
+## a036dc2fcbf052ec10621fd48b68dbb1  xf86dgaproto-2.1.tar.bz2
+#1d716d0dac3b664e5ee20c69d34bc10e  xf86driproto-2.1.1.tar.bz2
+#e793ecefeaecfeabd1aed6a01095174e  xf86vidmodeproto-2.3.1.tar.bz2
+## 9959fe0bfb22a0e7260433b8d199590a  xineramaproto-1.2.1.tar.bz2
+#16791f7ca8c51a20608af11702e51083  xproto-7.0.31.tar.bz2
+#EOF
+#
+#	grep -v '^#' $XPROTOS_MD5_FN | awk '{print $2}' | wget -i- -c \
+#	    -B https://www.x.org/pub/individual/proto/ &&
+#	md5sum -c $XPROTOS_MD5_FN
+#	
+#	local protf_list=$(grep -v '^#' $XPROTOS_MD5_FN | awk '{print $2}')
+#	for tf in $protf_list; do
+#		name_with_version="${tf%%.tar*}"
+#		proto_name="${name_with_version%-*}"
+#		# version="${name_with_version##*-}"
+#		tar -xpvf $tf
+#		mv $name_with_version $proto_name
+#		rm $tf
+#		echo $proto_name >> $LIBNAME_LIST
+#	done
+#	
+#	popd
+#
 	touch XORG_DOWNLOADED
 
 	popd
@@ -289,7 +289,7 @@ custom_build() {
 	build_mesonproj_with_deps "xorgproto" "$pkg_name" "$MESON_CROSS_FILE_BASE"
 	mv_xorg_comp_to_prefix "xorgproto"
 	# rename doc
-	mv -v $XORG_PREFIX/share/doc/xorgproto{,-2024.1}
+	mv -v $XORG_PREFIX/share/doc/xorgproto{,-2025.1}
 
 	# deps: xorgproto
 	build_makeproj_with_deps "libXau" "$pkg_name" "$XORG_CONFIG"
@@ -298,41 +298,45 @@ custom_build() {
 	# deps: libXau, xcp-proto (fake deps xorg)
 	build_makeproj_with_deps "libxcb" "$pkg_name" "$XORG_CONFIG --without-doxygen --docdir=\${datadir}/doc/libxcb-1.17.0"
 	mv_xorg_comp_to_prefix "libxcb"
-
-	local pkg
-
-	pushd xprotos
-	for pkg in $(cat $LIBNAME_LIST); do
-		info "building xorg protocol component: $pkg"
-	
-		# rubbish 2009 xproto. Fuck xorg
-		case $pkg in
-			xproto|xextproto|renderproto|dri2proto|xf86driproto|xf86vidmodeproto)
-				# configure it manually
-				# not support aarch64 (${OHOS_CPU}), not support musl. Idiot
-				_xproto_arch=${OHOS_CPU}
-				if [ "${OHOS_CPU}" == "aarch64" ]; then
-					_xproto_arch=arm
-				fi
-				pushd $pkg
-				./configure --prefix=${target_root_prefix_without_pkgname} \
-					--libdir=${target_root_prefix_without_pkgname}/${OHOS_LIBDIR} \
-					--target=${_xproto_arch}-linux-gnu \
-					--host=${_xproto_arch}-linux-gnu \
-					--build=${BUILD_PLATFORM_TRIPLET} \
-					${XORG_CONFIG}
-				make install
-				popd
-				mv ${target_root_prefix_without_pkgname} $(get_pkg_dst_dir $pkg)
-				mv_xorg_comp_to_prefix "$pkg"
-				continue
-			;;
-		esac
-		build_makeproj_with_deps "$pkg" "$pkg_name" "$XORG_CONFIG"
-		mv_xorg_comp_to_prefix "$pkg"
-	done
-	popd
-
+#
+#	local pkg
+#
+#	pushd xprotos
+#	for pkg in $(cat $LIBNAME_LIST); do
+#		info "building xorg protocol component: $pkg"
+#		if [ ! -d "$pkg" ]; then
+#			error "cannot find package source root in xorg: $pkg"
+#			return 1
+#		fi
+#	
+#		# rubbish 2009 xproto. Fuck xorg
+#		case $pkg in
+#			xproto|xextproto|renderproto|dri2proto|xf86driproto|xf86vidmodeproto)
+#				# configure it manually
+#				# not support aarch64 (${OHOS_CPU}), not support musl. Idiot
+#				_xproto_arch=${OHOS_CPU}
+#				if [ "${OHOS_CPU}" == "aarch64" ]; then
+#					_xproto_arch=arm
+#				fi
+#				pushd $pkg
+#				./configure --prefix=${target_root_prefix_without_pkgname} \
+#					--libdir=${target_root_prefix_without_pkgname}/${OHOS_LIBDIR} \
+#					--target=${_xproto_arch}-linux-gnu \
+#					--host=${_xproto_arch}-linux-gnu \
+#					--build=${BUILD_PLATFORM_TRIPLET} \
+#					${XORG_CONFIG}
+#				make install
+#				popd
+#				mv ${target_root_prefix_without_pkgname} $(get_pkg_dst_dir $pkg)
+#				mv_xorg_comp_to_prefix "$pkg"
+#				continue
+#			;;
+#		esac
+#		build_makeproj_with_deps "$pkg" "$pkg_name" "$XORG_CONFIG"
+#		mv_xorg_comp_to_prefix "$pkg"
+#	done
+#	popd
+#
 	pushd xlibs
 	# deps: libxcb (fake deps), fontconfig
 	# note: freetype, readline, ncurses use special header dir
@@ -341,6 +345,10 @@ custom_build() {
 	_xlibs_deps="$pkg_name $(get_pkg_names_from_deps $pkg_build_deps)"
 	for pkg in $(cat $LIBNAME_LIST); do
 		info "building xorg lib component: $pkg"
+		if [ ! -d "$pkg" ]; then
+			error "cannot find package source root in xorg: $pkg"
+			return 1
+		fi
 		pkg_flags="$XORG_CONFIG --enable-malloc0returnsnull=no"
 		case $pkg in
 			libXfont2)

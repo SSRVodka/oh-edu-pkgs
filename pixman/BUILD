@@ -12,16 +12,17 @@ setup() {
 # TODO: please fill in the variables for this package
 
 # [REQUIRED, NON-EMPTY, SEMVER]
-pkg_version="25.2.2"
+pkg_version="0.46.4"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
-pkg_name="mesa"
+pkg_name="pixman"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps="xorg>=7.0,libdrm>2.0,glslang>=16.0,llvm>20.0,SPIRV-LLVM-Translator>=21.0,zstd>=1.0"
+pkg_deps="libpng>=1.6,python3"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="xorg>=7.0,libdrm>2.0,glslang>=16.0,llvm>20.0,SPIRV-LLVM-Translator>=21.0,SPIRV-Headers>=1.4,SPIRV-Tools>=1.4,zstd>=1.0,fontconfig>=2.17,freetype>2.0,libncursesw>6.0,libreadline>8.0,icu>70.0,libexpat>2.0,libxml2>2.0,libiconv>1.0,python3,python3-build,python3-setuptools"
+# NOTE: you need to add build deps "python3,python3-build,python3-setuptools" if you use setup_pycrossenv in hooks
+pkg_build_deps="libpng>=1.6,python3"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
-pkg_source_url="https://mesa.freedesktop.org/archive/mesa-25.2.2.tar.xz"
+pkg_source_url="https://www.cairographics.org/releases/pixman-0.46.4.tar.gz"
 # [OPTIONAL, VALID-URL]
 pkg_release_url=""
 ###################################################
@@ -33,9 +34,13 @@ pkg_support_archs="x86_64,aarch64,arm"
 # NOTE:
 #  - "pure-python" is ONLY valid for those packages without ANY native package dependency.
 #  - "custom" will skip the default build process
+#  - add "python3,python3-build,python3-wheel,python3-setuptools" to pkg_build_deps if you use "pure-python"
+#  - you are responsible to set setup_pycrossenv if you set pkg_build_type == "meson", ensure meson, and use destroy_pycrossenv before finishing building this package.
 pkg_build_type="meson"
 # [OPTIONAL]
-pkg_build_parallism="20"
+pkg_build_parallism=""
+# [OPTIONAL: empty or Y]
+pkg_force_clean_build=""
 
 ####### build type related (all OPTIONAL) #######
 
@@ -56,7 +61,7 @@ pkg_build_cmake_extra_cmake_findroot_path=""
 
 # fill in a absolute path
 pkg_build_meson_cross_file="${MESON_CROSS_FILE_BASE}"
-pkg_build_meson_extra_meson_flags="-Dcpp_rtti=false -Dvalgrind=disabled -Dplatforms=x11 -Dgallium-drivers=llvmpipe -Dvulkan-drivers=swrast"
+pkg_build_meson_extra_meson_flags="--buildtype=release"
 pkg_build_meson_extra_cflags=""
 pkg_build_meson_extra_ldflags=""
 pkg_build_meson_extra_cmake_prefix_path=""
@@ -93,7 +98,7 @@ pkg_build_meson_extra_cmake_findroot_path=""
 # Hook: called before setup.sh is sourced
 # NOTE:
 #  - failure in this function will terminate this script immediately
-#  - you can NOT use local variables defined above. you can only use ${native_project_root}, ${native_sources_root} built by builder.sh
+#  - you can NOT use local variables defined above. you can only use ${native_project_root}, ${native_sources_root}, ${native_dst_root} built by builder.sh
 native_env_hook() {
 	:
 }
@@ -114,25 +119,7 @@ fi
 
 # Hook: called before entering build dir
 prebuilt_patch_hook() {
-
-	setup_pycrossenv
-	# destroy in post-built hook
-
-	reset_meson $MESON_CROSS_FILE_BASE
-	# preparing build-time python deps before building mesa
-	BUILDTIME_PY=$(which build-python)
-	sed -i "s|^\(python[[:space:]]*=[[:space:]]*\).*|\1'${BUILDTIME_PY}'|" $MESON_CROSS_FILE_BASE
-	# using build-time (not runtime) python on the host machine
-	build-pip install packaging mako pyyaml meson
-
-	# patch meson for ohos
-	sed -i -e "\|ohos|! s|^\(system_has_kms_drm[[:space:]]*=[[:space:]]*.*'linux',[[:space:]]*\)\('sunos',.*\)$|\1'ohos', \2|" \
-		-e "\|ohos|! s|^\(if with_platform_android and get_option('platform-sdk-version').*\)$|\1 or 'ohos' == 'ohos'|" \
-		${current_source_root}/meson.build
-	# patch for not supporting pthread_cancel
-	sed -i -e "\|//|! s|\(pthread_cancel(.*);\)|// \1\nprintf(\"OHOS not support pthread_cancel\");exit(1);|g" \
-		-e "\|//|! s|\(pthread_setcanceltype(.*);\)|// \1\nprintf(\"OHOS not support pthread_setcanceltype\");exit(1);|g" \
-		${current_source_root}/src/vulkan/wsi/wsi_common_display.c
+	:
 }
 
 # Hook: same as `prebuilt_patch_hook` but executed once if the source directory is not changed (mark file PATCHED)
@@ -147,15 +134,10 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
-	
-	# add special headers
-	CFLAGS="-I$(get_pkg_dst_dir freetype)/include/freetype2 -I$(get_pkg_dst_dir libncursesw)/include/ncursesw -I$(get_pkg_dst_dir libreadline)/include/readline -D_GNU_SOURCE $CFLAGS"
-	CXXFLAGS=$CFLAGS
-	CPPFLAGS="-D_GNU_SOURCE $CPPFLAGS"
-	# fix llvm-config failure
-	LDFLAGS="-lLLVM-21 $LDFLAGS"
-	PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR:$(get_pkg_dst_dir xorg)/share/pkgconfig"
-
+	reset_meson $MESON_CROSS_FILE_BASE
+	sed -i "s|^\(python[[:space:]]*=[[:space:]]*\).*|\1'${BUILD_PYTHON}'|" $MESON_CROSS_FILE_BASE
+	setup_pycrossenv
+	build-pip install meson
 	_custom_build_continue=true
 }
 

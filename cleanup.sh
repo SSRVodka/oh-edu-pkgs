@@ -4,7 +4,7 @@
 if [ -n "$OLD_PATH" ]; then
     export PATH=$OLD_PATH
 fi
-if [ -n "$OLD_LD_LIBPATH"]; then
+if [ -n "$OLD_LD_LIBPATH" ]; then
     export LD_LIBRARY_PATH=$OLD_LD_LIBPATH
 fi
 

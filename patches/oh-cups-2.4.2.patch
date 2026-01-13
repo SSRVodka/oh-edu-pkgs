@@ -1,0 +1,15 @@
+--- cups/thread.c	2026-01-07 17:07:56.980263687 +0800
++++ cups/thread.c.oh	2026-01-07 17:07:45.589728998 +0800
+@@ -154,7 +154,12 @@
+ void
+ _cupsThreadCancel(_cups_thread_t thread)/* I - Thread ID */
+ {
++#ifndef __OPENHARMONY__
+   pthread_cancel(thread);
++#else
++  printf("libcups WARN by SSRVodka: pthread_cancel not supported on OpenHarmony\n");
++  exit(1);
++#endif
+ }
+ 
+ 

@@ -1,0 +1,70 @@
+--- make/autoconf/flags-cflags.m4	2026-01-08 11:50:01.820990748 +0800
++++ make/autoconf/flags-cflags.m4.oh	2026-01-08 11:18:16.393002713 +0800
+@@ -679,10 +679,10 @@
+     fi
+   fi
+ 
+-  OS_CFLAGS="$OS_CFLAGS -DLIBC=$OPENJDK_TARGET_LIBC"
+-  if test "x$OPENJDK_TARGET_LIBC" = xmusl; then
+-    OS_CFLAGS="$OS_CFLAGS -DMUSL_LIBC"
+-  fi
++  #OS_CFLAGS="$OS_CFLAGS -DLIBC=$OPENJDK_TARGET_LIBC"
++  #if test "x$OPENJDK_TARGET_LIBC" = xmusl; then
++  #  OS_CFLAGS="$OS_CFLAGS -DMUSL_LIBC"
++  #fi
+ 
+   # Where does this really belong??
+   if test "x$TOOLCHAIN_TYPE" = xgcc || test "x$TOOLCHAIN_TYPE" = xclang; then
+--- src/hotspot/os/posix/os_posix.cpp	2026-01-08 11:50:48.345726407 +0800
++++ src/hotspot/os/posix/os_posix.cpp.oh	2026-01-08 11:50:25.654367817 +0800
+@@ -469,6 +469,7 @@
+   int bootsec = -1;
+   int currsec = time(nullptr);
+   struct utmpx* ent;
++#ifndef __OPENHARMONY__
+   setutxent();
+   while ((ent = getutxent())) {
+     if (!strcmp("system boot", ent->ut_line)) {
+@@ -480,6 +481,9 @@
+   if (bootsec != -1) {
+     os::print_dhm(st, "OS uptime:", (long) (currsec-bootsec));
+   }
++#else
++  os::print_dhm(st, "[WARN by SSRVODKA] OpenHarmony not support uptime in utmpx. Use current time as uptime: ", (long) currsec);
++#endif
+ }
+ 
+ static void print_rlimit(outputStream* st, const char* msg,
+--- src/hotspot/os/linux/os_linux.cpp	2026-01-08 12:54:02.534797842 +0800
++++ src/hotspot/os/linux/os_linux.cpp.oh	2026-01-08 12:54:36.580138009 +0800
+@@ -141,7 +141,7 @@
+ // for timer info max values which include all bits
+ #define ALL_64_BITS CONST64(0xFFFFFFFFFFFFFFFF)
+ 
+-#ifdef MUSL_LIBC
++#if defined(MUSL_LIBC) && !defined(__OPENHARMONY__)
+ // dlvsym is not a part of POSIX
+ // and musl libc doesn't implement it.
+ static void *dlvsym(void *handle,
+@@ -1892,11 +1892,21 @@
+   const char* l_path = nullptr;
+   assert(lib != nullptr, "dll_path parameter must not be null");
+ 
++#ifndef __OPENHARMONY__
+   int res_dli = ::dlinfo(lib, RTLD_DI_LINKMAP, &lmap);
+   if (res_dli == 0) {
+     l_path = lmap->l_name;
+   }
+   return l_path;
++#else
++  // SSRVODKA: Best-effort fallback for musl and other libcs
++  Dl_info dlinfo;
++  if (::dladdr(lib, &dlinfo) != 0) {
++    // dli_fname is the path of the shared object containing `lib`
++    return dlinfo.dli_fname;
++  }
++  return nullptr;
++#endif
+ }
+ 
+ static unsigned count_newlines(const char* s) {
