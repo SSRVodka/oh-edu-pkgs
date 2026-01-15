@@ -21,6 +21,7 @@ cpp_link_args = common_flags + common_ld_flags
 
 [properties]
 cmake_toolchain_file = ohos_sdk / 'native/build/cmake/ohos.toolchain.cmake'
+sizeof_long = 8
 sizeof_long_double = 8
 longdouble_format = 'IEEE_DOUBLE_LE'
 

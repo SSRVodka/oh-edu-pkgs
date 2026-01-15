@@ -61,7 +61,7 @@ pkg_build_cmake_extra_cmake_findroot_path=""
 
 # fill in a absolute path
 pkg_build_meson_cross_file="${MESON_CROSS_FILE_BASE}"
-pkg_build_meson_extra_meson_flags="--buildtype=release"
+pkg_build_meson_extra_meson_flags="--buildtype=release -Dglib=disabled"
 pkg_build_meson_extra_cflags=""
 pkg_build_meson_extra_ldflags=""
 pkg_build_meson_extra_cmake_prefix_path=""
