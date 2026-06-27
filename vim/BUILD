@@ -134,7 +134,7 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
-	export VIMRUNTIMEDIR=/data/vim/vim90
+	export VIMRUNTIMEDIR=/sys_prod/robot/out/share/vim/vim91
 	# patch OHOS_SDK fortify
 	export CFLAGS="-nostdinc -isystem ${HOST_SYSROOT}/usr/include -isystem ${HOST_SYSROOT}/usr/include/${OHOS_CPU}-linux-ohos --target=${OHOS_CPU}-linux-ohos --sysroot=${HOST_SYSROOT} ${CFLAGS}"
 	export CXXFLAGS="--target=${OHOS_CPU}-linux-ohos --sysroot=${HOST_SYSROOT} ${CXXFLAGS}"
