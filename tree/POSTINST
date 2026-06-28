@@ -1,0 +1,13 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+_prefix=${1:-}
+if [ -z "$_prefix" ]; then
+    echo "ERROR: empty prefix in 1st parameter"
+    exit 1
+fi
+
+# feel free to use $_prefix here
+
+# echo "The package is installed at '$_prefix'"
+
