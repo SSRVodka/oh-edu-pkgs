@@ -74,6 +74,7 @@ custom_build() {
 	export RUSTFLAGS="-C linker=${ohos_cc} \
 		-C link-arg=--target=aarch64-linux-ohos \
 		-C link-arg=--sysroot=${ohos_sysroot} \
+		-C link-arg=-L$(get_pkg_dst_dir python3)/lib \
 		-C link-arg=-lpython${PY_VERSION}"
 
 	export CC_aarch64_unknown_linux_musl="${ohos_cc}"
