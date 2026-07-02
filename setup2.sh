@@ -634,6 +634,47 @@ exit_pycrossenv() {
 	deactivate
 }
 
+# Centralized Rust/PyO3/cc-rs cross-compilation setup.
+# Called by builder.sh's setup_pycrossenv() after enter_pycrossenv.
+# Sets env vars for maturin-based packages (tokenizers, safetensors, etc.)
+# and CMAKE_ASM_COMPILER for cmake packages using ASM (zstd, etc.).
+setup_rust_cross_compile() {
+	local ohos_sysroot="${OHOS_SDK}/native/sysroot"
+	local ohos_cc="${OHOS_SDK}/native/llvm/bin/clang"
+	local ohos_cxx_inc="${OHOS_SDK}/native/llvm/include/libcxx-ohos/include/c++/v1"
+
+	# CMAKE_ASM_COMPILER for cmake packages with ASM (e.g. zstd)
+	export CMAKE_ASM_COMPILER="${ohos_cc}"
+
+	# Rust target + linker
+	export CARGO_BUILD_TARGET=aarch64-unknown-linux-musl
+	export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER="${ohos_cc}"
+	export RUSTFLAGS="-C linker=${ohos_cc} \
+		-C link-arg=--target=aarch64-linux-ohos \
+		-C link-arg=--sysroot=${ohos_sysroot} \
+		-C link-arg=-L$(get_pkg_dst_dir python3)/lib \
+		-C link-arg=-lpython${PY_VERSION}"
+
+	# cc-rs overrides: prevent duplicate --target and wrong C++ stdlib
+	export CC_aarch64_unknown_linux_musl="${ohos_cc}"
+	export CXX_aarch64_unknown_linux_musl="${OHOS_SDK}/native/llvm/bin/clang++"
+	export CRATE_CC_NO_DEFAULTS=1
+	export CFLAGS_aarch64_unknown_linux_musl="--target=aarch64-linux-ohos --sysroot=${ohos_sysroot} -I${ohos_cxx_inc}"
+	export CXXFLAGS_aarch64_unknown_linux_musl="--target=aarch64-linux-ohos --sysroot=${ohos_sysroot} -I${ohos_cxx_inc} -std=c++17"
+	export CXXSTDLIB="c++"
+
+	# PyO3 cross-compilation
+	local host_python=$(which python3)
+	export PYO3_PYTHON="${host_python}"
+	export PYO3_CROSS_PYTHON_VERSION="${PY_VERSION}"
+	export PYO3_CROSS_LIB_DIR="${HOST_PYTHON_DIST}/lib"
+	export PYO3_CROSS_INCLUDE_DIR="${HOST_PYTHON_DIST}/include/python${PY_VERSION}"
+
+	# libgcc_s stub (OH uses libunwind, Rust musl target expects libgcc_s)
+	echo "" | ${OHOS_SDK}/native/llvm/bin/llvm-ar rcs \
+		${ohos_sysroot}/usr/lib/aarch64-linux-ohos/libgcc_s.a 2>/dev/null || true
+}
+
 # prepare meson in host env
 pip install meson
 
