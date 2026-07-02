@@ -60,42 +60,19 @@ prebuilt_patch_once_hook() {
 }
 
 custom_build() {
+	# safetensors is a Rust+Python hybrid built with maturin (PyO3).
+	# Rust/cc-rs/PyO3 cross-compile env vars are set centrally in
+	# setup2.sh's setup_rust_cross_compile() (called by setup_pycrossenv).
+
 	export PATH="${HOME}/.cargo/bin:${PATH}"
 	rustup target add aarch64-unknown-linux-musl 2>/dev/null || true
 	pip install maturin 2>/dev/null || true
 
 	setup_pycrossenv
 
-	local ohos_sysroot="${OHOS_SDK}/native/sysroot"
-	local ohos_cc="${OHOS_SDK}/native/llvm/bin/clang"
-	local ohos_cxx_inc="${OHOS_SDK}/native/llvm/include/libcxx-ohos/include/c++/v1"
-
-	export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER="${ohos_cc}"
-	export RUSTFLAGS="-C linker=${ohos_cc} \
-		-C link-arg=--target=aarch64-linux-ohos \
-		-C link-arg=--sysroot=${ohos_sysroot} \
-		-C link-arg=-L$(get_pkg_dst_dir python3)/lib \
-		-C link-arg=-lpython${PY_VERSION}"
-
-	export CC_aarch64_unknown_linux_musl="${ohos_cc}"
-	export CXX_aarch64_unknown_linux_musl="${OHOS_SDK}/native/llvm/bin/clang++"
-	export CRATE_CC_NO_DEFAULTS=1
-	export CFLAGS_aarch64_unknown_linux_musl="--target=aarch64-linux-ohos --sysroot=${ohos_sysroot} -I${ohos_cxx_inc}"
-	export CXXFLAGS_aarch64_unknown_linux_musl="--target=aarch64-linux-ohos --sysroot=${ohos_sysroot} -I${ohos_cxx_inc} -std=c++17"
-	export CXXSTDLIB="c++"
-
-	local host_python=$(which python3)
-	export PYO3_PYTHON="${host_python}"
-	export PYO3_CROSS_PYTHON_VERSION="${PY_VERSION}"
-	export PYO3_CROSS_LIB_DIR="${HOST_PYTHON_DIST}/lib"
-	export PYO3_CROSS_INCLUDE_DIR="${HOST_PYTHON_DIST}/include/python${PY_VERSION}"
-
-	# libgcc_s stub (OH uses libunwind)
-	echo "" | ${OHOS_SDK}/native/llvm/bin/llvm-ar rcs ${ohos_sysroot}/usr/lib/aarch64-linux-ohos/libgcc_s.a 2>/dev/null || true
-
 	pushd ${current_source_root}
 	export MATURIN_NO_WHEEL_REPAIR=1
-	maturin build --interpreter "${host_python}" --target aarch64-unknown-linux-musl --release --skip-auditwheel
+	maturin build --interpreter "${PYO3_PYTHON}" --target aarch64-unknown-linux-musl --release --skip-auditwheel
 
 	local wheel_file=$(find ${current_source_root} -name "*.whl" -path "*/wheels/*" 2>/dev/null | head -1)
 	if [ -n "${wheel_file}" ]; then
@@ -104,10 +81,7 @@ custom_build() {
 		python3 -m zipfile -e "${wheel_file}" "${extract_dir}"
 		local site_pkgs="${HOST_SITE_PKGS}"
 		cp -r "${extract_dir}/safetensors" "${site_pkgs}/"
-		local dist_info=$(ls -d "${extract_dir}/safetensors-*.dist-info" 2>/dev/null | head -1)
-		if [ -n "${dist_info}" ]; then
-			cp -r "${dist_info}" "${site_pkgs}/"
-		fi
+		cp -r ${extract_dir}/safetensors-*.dist-info "${site_pkgs}/" 2>/dev/null || true
 	else
 		echo "ERROR: No wheel found after maturin build"
 		exit 1

@@ -58,66 +58,19 @@ prebuilt_patch_once_hook() {
 
 custom_build() {
 	# tokenizers is a Rust+Python hybrid built with maturin (PyO3).
-	# We cross-compile for aarch64-unknown-linux-musl using the OH SDK
-	# clang/ld.lld as the Rust backend linker, with the OH musl sysroot.
+	# Rust/cc-rs/PyO3 cross-compile env vars are set centrally in
+	# setup2.sh's setup_rust_cross_compile() (called by setup_pycrossenv).
 
 	export PATH="${HOME}/.cargo/bin:${PATH}"
-
-	# Ensure Rust musl target is installed
 	rustup target add aarch64-unknown-linux-musl 2>/dev/null || true
-
-	# Install maturin for the build
 	pip install maturin 2>/dev/null || true
 
-	# Enter Python cross-compile env (provides target Python headers etc.)
 	setup_pycrossenv
 
-	# Configure Rust to use OH SDK linker + sysroot
-	local ohos_sysroot="${OHOS_SDK}/native/sysroot"
-	local ohos_ld="${OHOS_SDK}/native/llvm/bin/ld.lld"
-	local ohos_cc="${OHOS_SDK}/native/llvm/bin/clang"
-
-	export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER="${ohos_cc}"
-	# cc-rs auto-links libstdc++ when it detects C++ code; override to libc++
-	export CXXSTDLIB="c++"
-	# Use OH SDK clang as the Rust linker backend
-	local ohos_libdir="${ohos_sysroot}/usr/lib/aarch64-linux-ohos"
-	export RUSTFLAGS="-C linker=${ohos_cc} \
-		-C link-arg=--target=aarch64-linux-ohos \
-		-C link-arg=--sysroot=${ohos_sysroot} \
-		-C link-arg=-L${ohos_libdir} \
-		-C link-arg=-lpython${PY_VERSION}"
-	export CARGO_BUILD_TARGET=aarch64-unknown-linux-musl
-
-	# C++ headers for cc-rs (esaxx-rs needs <cstdint> and __config_site)
-	# OH SDK has C++ headers in two locations; the libcxx-ohos variant has __config_site
-	local ohos_cxx_inc="${OHOS_SDK}/native/llvm/include/libcxx-ohos/include/c++/v1"
-
-	# Override cc-rs compiler selection to use OH SDK clang without duplicate --target
-	# cc-rs appends its own --target=<rust_target>, so we must NOT include --target in CC/CXX
-	export CC_aarch64_unknown_linux_musl="${ohos_cc}"
-	export CXX_aarch64_unknown_linux_musl="${OHOS_SDK}/native/llvm/bin/clang++"
-	# CRATE_CC_NO_DEFAULTS=1 prevents cc-rs from adding --target=<rust_target> automatically
-	export CRATE_CC_NO_DEFAULTS=1
-	export CFLAGS_aarch64_unknown_linux_musl="--target=aarch64-linux-ohos --sysroot=${ohos_sysroot} -I${ohos_cxx_inc}"
-	export CXXFLAGS_aarch64_unknown_linux_musl="--target=aarch64-linux-ohos --sysroot=${ohos_sysroot} -I${ohos_cxx_inc} -std=c++17"
-	# Also set generic CFLAGS/CXXFLAGS for the build
-	export CFLAGS="--target=aarch64-linux-ohos --sysroot=${ohos_sysroot} -I${ohos_cxx_inc}"
-	export CXXFLAGS="--target=aarch64-linux-ohos --sysroot=${ohos_sysroot} -I${ohos_cxx_inc} -std=c++17"
-
-	# PyO3 cross-compilation: use HOST python (x86) as the interpreter for
-	# metadata, but tell PyO3 to cross-compile for the target.
-	local host_python=$(which python3)
-	export PYO3_PYTHON="${host_python}"
-	export PYO3_CROSS_PYTHON_VERSION="${PY_VERSION}"
-	export PYO3_CROSS_LIB_DIR="${HOST_PYTHON_DIST}/lib"
-	export PYO3_CROSS_INCLUDE_DIR="${HOST_PYTHON_DIST}/include/python${PY_VERSION}"
-
 	pushd ${current_source_root}
-	# Build with maturin: use host python as interpreter, cross-compile via cargo target
-	# Skip auditwheel to avoid trying to bundle shared libs not available on host
 	export MATURIN_NO_WHEEL_REPAIR=1
-	maturin build --interpreter "${host_python}" --target aarch64-unknown-linux-musl --release --skip-auditwheel
+	maturin build --interpreter "${PYO3_PYTHON}" --target aarch64-unknown-linux-musl --release --skip-auditwheel
+
 	# Extract the wheel manually (host pip can't install musllinux wheels)
 	local wheel_file=$(find ${current_source_root} -name "*.whl" -path "*/wheels/*" 2>/dev/null | head -1)
 	if [ -n "${wheel_file}" ]; then
@@ -125,10 +78,9 @@ custom_build() {
 		local extract_dir="${current_source_root}/wheel_extracted"
 		rm -rf "${extract_dir}" && mkdir -p "${extract_dir}"
 		python3 -m zipfile -e "${wheel_file}" "${extract_dir}"
-		# Copy tokenizers package to the cross env site-packages
 		local site_pkgs="${HOST_SITE_PKGS}"
 		cp -r "${extract_dir}/tokenizers" "${site_pkgs}/"
-		cp -r "${extract_dir}/tokenizers-0.22.2.dist-info" "${site_pkgs}/"
+		cp -r ${extract_dir}/tokenizers-*.dist-info "${site_pkgs}/"
 	else
 		echo "ERROR: No wheel found after maturin build"
 		exit 1

@@ -331,6 +331,10 @@ setup_pycrossenv() {
 
     # this will modify envs like PATH, _PS
     enter_pycrossenv
+
+    # Set up Rust/PyO3/cc-rs/ASM cross-compilation env vars centrally.
+    # Individual BUILD files no longer need to set these.
+    setup_rust_cross_compile
 }
 
 destroy_pycrossenv() {
