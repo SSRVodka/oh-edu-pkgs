@@ -653,7 +653,8 @@ setup_rust_cross_compile() {
 		-C link-arg=--target=aarch64-linux-ohos \
 		-C link-arg=--sysroot=${ohos_sysroot} \
 		-C link-arg=-L$(get_pkg_dst_dir python3)/lib \
-		-C link-arg=-lpython${PY_VERSION}"
+		-C link-arg=-lpython${PY_VERSION} \
+		-C link-arg=-l:libunwind.a"
 
 	# cc-rs overrides: prevent duplicate --target and wrong C++ stdlib
 	export CC_aarch64_unknown_linux_musl="${ohos_cc}"
