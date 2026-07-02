@@ -63,8 +63,14 @@ custom_build() {
 
 	setup_pycrossenv
 
+	# zstandard's setup.py imports make_cffi.py which calls cffi.FFI() and
+	# imports _cffi_backend. The crossenv's cross/bin/python3 is the host
+	# (x86) kernel, so _cffi_backend.so must be x86. Install cffi to the
+	# BUILD side (host python), not the CROSS side.
+	${PY_CROSS_ROOT}/build/bin/pip install cffi
+
 	pushd ${current_source_root}
-	pip install -v --no-binary :all: .
+	pip install -v --no-binary :all: --no-build-isolation .
 	popd
 
 	destroy_pycrossenv
