@@ -135,6 +135,7 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
+	$BUILD_PIP install cmake
 	setup_pycrossenv
 
 	local pil_deps=$(get_pkg_names_from_deps $pkg_deps)

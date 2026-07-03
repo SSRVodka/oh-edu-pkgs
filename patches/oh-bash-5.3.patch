@@ -1,0 +1,15 @@
+--- bashansi.h.ori	2026-07-03 13:29:01.790107861 +0000
++++ bashansi.h	2026-07-03 13:26:15.702742149 +0000
+@@ -40,10 +40,12 @@
+ #  if defined (HAVE_STDBOOL_H)
+ #    include <stdbool.h>
+ #  else
++#if __STDC_VERSION__ < 202311L
+ #    undef bool
+ typedef unsigned char bool;
+ #    define true 1
+ #    define false 0
++#endif
+ #  endif
+ #endif
+ 

@@ -101,7 +101,7 @@ export CPPFLAGS=${CXXFLAGS}
 export LDFLAGS="-fuse-ld=lld -lm -L${TARGET_ROOT}/lib -L${HOST_SYSROOT}/usr/${OHOS_LIBDIR}"
 export LDSHARED="${CC} ${LDFLAGS} -shared"
 
-export PATH=${OHOS_SDK}/native/llvm/bin:${OHOS_SDK}/native/toolchains:$PATH
+export PATH=$PATH:${OHOS_SDK}/native/llvm/bin:${OHOS_SDK}/native/toolchains
 
 export PKG_CONFIG_SYSTEM_IGNORE_PATH=/usr/local/lib/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig
 export PKG_CONFIG_LIBDIR="${HOST_SYSROOT}/usr/${OHOS_LIBDIR}:${HOST_SYSROOT}/usr/${OHOS_LIBDIR}/pkgconfig"
@@ -251,6 +251,10 @@ build_makeproj_with_deps() {
 	info "ldflags: ${LDFLAGS}"
 	info "pkgconfig_libdir: ${PKG_CONFIG_LIBDIR}"
 	$configure_exe $configure_flags
+	current_build_root=$(readlink -f .)
+	if [ "x${pkg_build_type:-}" != "xcustom" ]; then
+		post_configure_hook || { error "post_configure_hook failed for ${target_dir}"; return 1; }
+	fi
 
 	#read -p "check >>> "
 	make -j${make_parallism} || { return 1; }
@@ -343,6 +347,10 @@ build_cmakeproj_with_deps() {
 		-DCMAKE_VERBOSE_MAKEFILE=ON \
 		-DCMAKE_CROSSCOMPILING=ON \
 		-B ${_my_cmake_builddir} || { return 1; }
+	current_build_root=$(readlink -f "${_my_cmake_builddir}")
+	if [ "x${pkg_build_type:-}" != "xcustom" ]; then
+		post_configure_hook || { error "post_configure_hook failed for ${target_dir}"; return 1; }
+	fi
 
 	#read -p "Check >>> "
 	${CMAKE_BIN} --build ${_my_cmake_builddir} -j${parallism} || { return 1; }
@@ -425,6 +433,10 @@ build_mesonproj_with_deps() {
 		${_my_extra_meson_flags} \
 		.. \
 	|| { return 1; }
+	current_build_root=$(readlink -f .)
+	if [ "x${pkg_build_type:-}" != "xcustom" ]; then
+		post_configure_hook || { error "post_configure_hook failed for ${target_dir}"; return 1; }
+	fi
 	# read -p "check >>> "
 	ninja -v -j${parallism} || { return 1; }
 	ninja install || { return 1; }

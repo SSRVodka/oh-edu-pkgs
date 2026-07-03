@@ -16,6 +16,7 @@ current_source_url=""
 current=""
 sources_root=""
 current_source_root=""
+current_build_root=""
 target_root_with_pkgname=""
 target_root_prefix_without_pkgname=""
 
@@ -466,6 +467,8 @@ build_package() {
     PATH="${native_dst_root}/bin:$PATH"
     LD_LIBRARY_PATH="${native_dst_root}/lib:$LD_LIBRARY_PATH"
     
+    post_configure_hook() { :; }
+
     source "$build_file"
     setup || { error "setup() failed"; restore_xcompile_flags; clear_vars; return 1; }
     validate_config || { restore_xcompile_flags; clear_vars; return 1; }
@@ -475,6 +478,7 @@ build_package() {
     current="$(dirname $(readlink -f $build_file))"
     sources_root="${SRC_ROOT}"
     current_source_root="${SRC_ROOT}/${pkg_name}"
+    current_build_root=""
     target_root_prefix_without_pkgname="${TARGET_ROOT}"
     target_root_with_pkgname="$(get_pkg_dst_dir $pkg_name)"
 

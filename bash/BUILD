@@ -12,21 +12,21 @@ setup() {
 # TODO: please fill in the variables for this package
 
 # [REQUIRED, NON-EMPTY, SEMVER]
-pkg_version="5.2"
+pkg_version="5.3"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
 pkg_name="bash"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps="libncursesw>=6.0"
+pkg_deps="libreadline>=8,libncursesw>=6.0"
 # [OPTIONAL, seperated by commas, NO-SPACE]
 # NOTE: you need to add build deps "python3,python3-build,python3-setuptools" if you use setup_pycrossenv in hooks
-pkg_build_deps="libncursesw>=6.0"
+pkg_build_deps="libreadline>=8,libncursesw>=6.0"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
-pkg_source_url="https://mirrors.tuna.tsinghua.edu.cn/gnu/bash/bash-5.2.tar.gz"
+pkg_source_url="https://mirrors.tuna.tsinghua.edu.cn/gnu/bash/bash-5.3.tar.gz"
 # [OPTIONAL, VALID-URL]
 pkg_release_url=""
 ###################################################
-pkg_license="GPL-3.0-or-later"
+pkg_license="Apache-2.0"
 # [REQUIRED, NON-EMPTY, seperated by commas, NO-SPACE]. e.g., x86_64,aarch64,arm,riscv
 pkg_support_archs="x86_64,aarch64,arm"
 # [REQUIED, NON-EMPTY]
@@ -45,7 +45,7 @@ pkg_force_clean_build=""
 
 ####### build type related (all OPTIONAL) #######
 
-pkg_build_autotools_extra_configure_flags="--with-curses --without-bash-malloc --disable-nls"
+pkg_build_autotools_extra_configure_flags="--without-bash-malloc --with-installed-readline"
 # fill in a relative path to the ${current_source_root} (defined below)
 pkg_build_autotools_bootstrap_script=""
 pkg_build_autotools_suffix_configure_flags=""
@@ -126,7 +126,11 @@ prebuilt_patch_hook() {
 # Hook: same as `prebuilt_patch_hook` but executed once if the source directory is not changed (mark file PATCHED)
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
-	:
+	sed -i 's|\(#include <sys/types.h>\)|\1\n#define HAVE_GETCWD|' ${current_source_root}/lib/intl/dcigettext.c
+	pushd ${current_source_root}
+	patch -p0 --dry-run < ${PATCH_FILE_ROOT}/oh-bash-${pkg_version}.patch
+	patch -p0 < ${PATCH_FILE_ROOT}/oh-bash-${pkg_version}.patch
+	popd
 }
 
 # Hook: customize building process.
@@ -135,8 +139,6 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
-	export CFLAGS="-I$(get_pkg_dst_dir libncursesw)/include/ncursesw ${CFLAGS}"
-	export LDFLAGS="${LDFLAGS} -L$(get_pkg_dst_dir libncursesw)/lib -lncursesw -ltinfow"
 	_custom_build_continue=true
 }
 

@@ -101,7 +101,7 @@ pkg_build_meson_extra_cmake_findroot_path=""
 #  - failure in this function will terminate this script immediately
 #  - you can NOT use local variables defined above. you can only use ${native_project_root}, ${native_sources_root}, ${native_dst_root} built by builder.sh
 native_env_hook() {
-	export PATH=/usr/bin:/bin:$PATH
+	:
 }
 
 # Hook: customize downloading source process. called when pacakge manager is downloading the source.
@@ -120,7 +120,11 @@ fi
 
 # Hook: called before entering build dir
 prebuilt_patch_hook() {
-	:
+	pushd "${current_source_root}"
+	# musl 没有 strverscmp, 但 strverscmp.c 用 #ifndef __linux__ 跳过了实现
+	# 去掉这个 guard 让 bundled 实现生效
+	sed -i 's/#ifndef __linux__/#if 1/' strverscmp.c
+	popd
 }
 
 # Hook: same as `prebuilt_patch_hook` but executed once if the source directory is not changed (mark file PATCHED)
@@ -136,10 +140,6 @@ prebuilt_patch_once_hook() {
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
 	pushd "${current_source_root}" >/dev/null
-
-	# musl 没有 strverscmp, 但 strverscmp.c 用 #ifndef __linux__ 跳过了实现
-	# 去掉这个 guard 让 bundled 实现生效
-	sed -i 's/#ifndef __linux__/#if 1/' strverscmp.c
 
 	# tree 用手写 Makefile, 无 configure, 直接 make
 	# 注意: Makefile 用大写 PREFIX (不是 prefix)
