@@ -3,11 +3,11 @@ set -Eeuo pipefail
 
 setup() {
 
-pkg_version="0.5.3"
+pkg_version="0.7.0"
 pkg_name="python3-safetensors"
 pkg_deps="python3>3.7"
 pkg_build_deps="python3>3.7"
-pkg_source_url="https://files.pythonhosted.org/packages/source/s/safetensors/safetensors-0.5.3.tar.gz"
+pkg_source_url="https://files.pythonhosted.org/packages/source/s/safetensors/safetensors-0.7.0.tar.gz"
 pkg_release_url=""
 pkg_license="Apache-2.0"
 pkg_support_archs="x86_64,aarch64,arm"
