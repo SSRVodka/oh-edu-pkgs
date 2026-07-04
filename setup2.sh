@@ -99,7 +99,7 @@ ensure_host_tools() {
 
 if [ -z "${OHOS_SDK:-}" ]; then
 	warn "please set OHOS_SDK env first"
-	exit 0
+	exit 1
 fi
 OHOS_SDK_API_VERSION=$(cat ${OHOS_SDK}/toolchains/oh-uni-package.json | grep "apiVersion" | tr -d [:space:] | awk -F':' '{print $2}' | awk -F'"' '{print $2}')
 

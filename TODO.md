@@ -191,7 +191,7 @@ boost/
 - [x] worker 调用 `builder.sh --build-one --cpu=<cpu> <BUILD_FILE>`。
 - [x] 每个包日志写入 `.ohloha/logs/<pkg>-<version>-<arch>.log`。
 - [x] 终端输出只打印 concise 状态：running/cache-hit/success/failed/skipped。
-- [x] 节点失败后，将依赖它的后继节点标记为 skipped；当前会继续构建无关分支，显式 `--keep-going` 开关待补。
+- [x] 节点失败后，将依赖它的后继节点标记为 skipped；`--keep-going` 允许继续构建尚未启动的无关分支。
 - [ ] 引入资源锁：download lock、build-id lock、host-venv lock、python/crossenv exclusive lock。
 
 验收：
