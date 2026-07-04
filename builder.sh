@@ -20,14 +20,16 @@ current_build_root=""
 target_root_with_pkgname=""
 target_root_prefix_without_pkgname=""
 
-native_project_root=$(dirname $(readlink -f $0))
-native_cache_root=${native_project_root}/.ohloha/native
+native_project_root=$(dirname "$(readlink -f "$0")")
+ohloha_root=${native_project_root}/.ohloha
+download_cache_root=${ohloha_root}/downloads
+native_cache_root=${ohloha_root}/native
 native_sources_root=${native_cache_root}/sources
 # ${native_dst_root}/bin will be added to PATH and ${native_dst_root}/lib
 # will be added to LD_LIBRARY_PATH when executing build_package
 # TODO: move host-python to here
 native_dst_root=${native_cache_root}/dst
-mkdir -p "${native_sources_root}" "${native_dst_root}"
+mkdir -p "${download_cache_root}" "${native_sources_root}" "${native_dst_root}"
 
 
 # Validation rules
@@ -653,44 +655,67 @@ wget_source() {
     url=${1:?usage: wget_source URL}
 	output_dir=${2:?output_dir must be set}
 
-    tmpf=$(mktemp) || { error "wget_source mktemp failed"; return 1; }
-    tmpd=$(mktemp -d) || { error "wget_source mktemp -d failed"; rm -f "$tmpf"; return 1; }
+    local source_digest archive_path
+    source_digest=$(printf '%s' "$url" | sha256sum | awk '{print $1}')
+    archive_path="${download_cache_root}/sha256-${source_digest}.archive"
+
+    tmpd=$(mktemp -d) || { error "wget_source mktemp -d failed"; return 1; }
 
     # Ensure cleanup on each failure/return without changing traps
     _cleanup() {
-        rm -f -- "$tmpf"
         rm -rf -- "$tmpd"
     }
 
-    # download
-    if ! wget -O "$tmpf" -- "$url"; then
+    download_source_archive() {
+        local _url="${1:?download url must be set}"
+        local _archive_path="${2:?archive path must be set}"
+        [ -f "$_archive_path" ] && return 0
+
+        mkdir -p "$(dirname "$_archive_path")"
+        local _tmp_archive
+        _tmp_archive=$(mktemp "${_archive_path}.tmp.XXXXXX") || return 1
+        if ! wget -O "$_tmp_archive" -- "$_url"; then
+            rm -f "$_tmp_archive"
+            return 1
+        fi
+        mv "$_tmp_archive" "$_archive_path"
+    }
+
+    # download archive once, then extract from the local cache
+    if declare -F with_ohloha_lock >/dev/null 2>&1; then
+        if ! with_ohloha_lock "download-${source_digest}" download_source_archive "$url" "$archive_path"; then
+            error "wget_source download failed"
+            _cleanup
+            return 1
+        fi
+    elif ! download_source_archive "$url" "$archive_path"; then
         error "wget_source download failed"
         _cleanup
         return 1
     fi
 
     # detect mime type (may be empty if file(1) not available; fallbacks below)
-    mime=$(file -b --mime-type "$tmpf" 2>/dev/null || echo "")
+    mime=$(file -b --mime-type "$archive_path" 2>/dev/null || echo "")
 
     case "$mime" in
         application/zip)
-            if ! unzip -q "$tmpf" -d "$tmpd"; then error "wget_source unzip failed"; _cleanup; return 1; fi
+            if ! unzip -q "$archive_path" -d "$tmpd"; then error "wget_source unzip failed"; _cleanup; return 1; fi
             ;;
         application/x-xz|application/x-7z-compressed)
-            if ! tar -xJf "$tmpf" -C "$tmpd"; then error "wget_source tar -J failed"; _cleanup; return 1; fi
+            if ! tar -xJf "$archive_path" -C "$tmpd"; then error "wget_source tar -J failed"; _cleanup; return 1; fi
             ;;
         application/gzip|application/x-gzip)
-            if ! tar -xzf "$tmpf" -C "$tmpd"; then error "wget_source tar -z failed"; _cleanup; return 1; fi
+            if ! tar -xzf "$archive_path" -C "$tmpd"; then error "wget_source tar -z failed"; _cleanup; return 1; fi
             ;;
         application/x-tar)
-            if ! tar -xf "$tmpf" -C "$tmpd"; then error "wget_source tar failed"; _cleanup; return 1; fi
+            if ! tar -xf "$archive_path" -C "$tmpd"; then error "wget_source tar failed"; _cleanup; return 1; fi
             ;;
         *)
             # fallback: try tar then unzip
-            if tar -tf "$tmpf" >/dev/null 2>&1; then
-                if ! tar -xf "$tmpf" -C "$tmpd"; then error "wget_source tar fallback failed"; _cleanup; return 1; fi
-            elif unzip -t "$tmpf" >/dev/null 2>&1; then
-                if ! unzip -q "$tmpf" -d "$tmpd"; then error "wget_source unzip fallback failed"; _cleanup; return 1; fi
+            if tar -tf "$archive_path" >/dev/null 2>&1; then
+                if ! tar -xf "$archive_path" -C "$tmpd"; then error "wget_source tar fallback failed"; _cleanup; return 1; fi
+            elif unzip -t "$archive_path" >/dev/null 2>&1; then
+                if ! unzip -q "$archive_path" -d "$tmpd"; then error "wget_source unzip fallback failed"; _cleanup; return 1; fi
             else
                 error "wget_source unknown or unsupported archive format: '$mime'"
                 _cleanup
