@@ -159,7 +159,7 @@ fingerprint 至少包含：
 - [x] 新增 helper：`get_pkg_patch_files`、`apply_pkg_patches`、`apply_pkg_git_patches`。
 - [ ] 约定私有 patch 放入 `<pkg>/patches/<pkg_version>/`。
 - [ ] 根目录 `patches/` 只保留真正跨包共享的 patch，或迁移为 `patches/shared/`。
-- [ ] 逐步迁移当前根目录私有 patch，例如 `oh-bash-5.3.patch`、`oh-boost-1.81.0.patch`、`oh-grpc.patch`。
+- [ ] 逐步迁移当前根目录私有 patch，例如 `oh-grpc.patch`、`oh-curl.patch`、`oh-openjdk21.0.10+35.patch`。已迁移 `bash`、`boost`。
 - [ ] 新增 `lint-patches.sh`，检查 patch 引用、归属和废弃全局路径。
 - [ ] 缓存 fingerprint 从 hash 整个根 `patches/` 过渡为 hash 当前包声明的 patch 文件。
 

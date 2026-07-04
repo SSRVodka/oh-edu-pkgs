@@ -42,6 +42,7 @@ pkg_build_type="autotools"
 pkg_build_parallism=""
 # [OPTIONAL: empty or Y]
 pkg_force_clean_build=""
+pkg_patch_files="patches/${pkg_version}/0001-fix-bashansi-bool-for-c23.patch"
 
 ####### build type related (all OPTIONAL) #######
 
@@ -126,10 +127,9 @@ prebuilt_patch_hook() {
 # Hook: same as `prebuilt_patch_hook` but executed once if the source directory is not changed (mark file PATCHED)
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
-	sed -i 's|\(#include <sys/types.h>\)|\1\n#define HAVE_GETCWD|' ${current_source_root}/lib/intl/dcigettext.c
-	pushd ${current_source_root}
-	patch -p0 --dry-run < ${PATCH_FILE_ROOT}/oh-bash-${pkg_version}.patch
-	patch -p0 < ${PATCH_FILE_ROOT}/oh-bash-${pkg_version}.patch
+	sed -i 's|\(#include <sys/types.h>\)|\1\n#define HAVE_GETCWD|' "${current_source_root}/lib/intl/dcigettext.c"
+	pushd "${current_source_root}"
+	apply_pkg_patches -p0
 	popd
 }
 

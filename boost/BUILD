@@ -36,6 +36,7 @@ pkg_support_archs="x86_64,aarch64,arm"
 pkg_build_type="custom"
 # [OPTIONAL]
 pkg_build_parallism=""
+pkg_patch_files="patches/${pkg_version}/0001-fix-numpy2-and-ohos-context.patch"
 
 ####### build type related (all OPTIONAL) #######
 
@@ -120,9 +121,8 @@ prebuilt_patch_hook() {
 # Hook: same as `prebuilt_patch_hook` but executed once if the source directory is not changed (mark file PATCHED)
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
-	pushd ${sources_root}
-	patch -p0 --dry-run < ${PATCH_FILE_ROOT}/oh-boost-1.81.0.patch
-	patch -p0 < ${PATCH_FILE_ROOT}/oh-boost-1.81.0.patch
+	pushd "${sources_root}"
+	apply_pkg_patches -p0
 	popd
 }
 
