@@ -1267,6 +1267,21 @@ build_package() {
         download || { error "download for '$build_file' failed"; restore_xcompile_flags; clear_vars; return 1; }
     fi
 
+    local recomputed_work_root
+    recomputed_work_root=$(compute_build_work_root "$build_file") || {
+        error "compute_build_work_root for '$build_file' failed after download"
+        restore_xcompile_flags
+        clear_vars
+        return 1
+    }
+    if [ "$recomputed_work_root" != "$current_work_root" ]; then
+        current_work_root="$recomputed_work_root"
+        mkdir -p "$current_work_root"
+        target_root_prefix_without_pkgname="${current_work_root}/install/dist.${OHOS_CPU}"
+        target_root_with_pkgname="$(get_pkg_install_dir "$pkg_name")"
+        rm -rf "${target_root_prefix_without_pkgname}" "${target_root_with_pkgname}"
+    fi
+
     local legacy_source_root="$current_source_root"
     print_vars
     if [ ! -f "${current_source_root}/PATCHED_BY_OHLOHA" ]; then
