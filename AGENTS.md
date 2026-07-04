@@ -46,7 +46,7 @@
 - `dist.<cpu>.<pkg>`：单包目标输出目录，例如 `dist.aarch64.openssl`。
 - `dist.<cpu>`：构建中间安装前缀，成功后通常被移动/合并到 `dist.<cpu>.<pkg>`。
 - `dist.wheels/`、`crossenv_<cpu>/`、`deploy/`。
-- `meson-scripts/*.meson`：由 `setup2.sh` 从 `*.meson.template` 重写生成。
+- `.ohloha/meson-cross/`：由 `setup2.sh` 从 `meson-scripts/*.meson.template` 生成的运行时 Meson cross file 副本。`meson-scripts/` 下只维护模板，不应生成或提交可变 `.meson` 文件。
 - `PKG_INDEX.json`：未来用于替代 `VERSION` / `VERSIONS` 的机器可读包索引。`VERSION` / `VERSIONS` 文本清单视为旧方案，后续可以废弃，不需要为新重构保持兼容。
 
 `.gitignore` 已覆盖上述大多数生成物。修改时优先触碰包目录、`patches/`、模板或根目录脚本。

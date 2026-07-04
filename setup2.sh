@@ -612,7 +612,8 @@ HOST_PYTHON=$HOST_PYTHON_BIN/python3
 HOST_PIP=$HOST_PYTHON_BIN/pip3
 HOST_MESON=$HOST_PYTHON_BIN/meson
 
-MESON_CROSS_ROOT=${CUR_DIR}/meson-scripts
+MESON_CROSS_TEMPLATE_ROOT=${CUR_DIR}/meson-scripts
+MESON_CROSS_ROOT=${OHLOHA_ROOT}/meson-cross/${OHOS_SDK_API_VERSION}/${OHOS_CPU}/pid-$$
 MESON_CROSS_FILE_BASE=${MESON_CROSS_ROOT}/base.meson
 
 # modify ARCH in meson config
@@ -708,8 +709,36 @@ reset_meson() {
 		error "invalid meson configure file: '$script'"
 		exit 1
 	fi
-	cp $script.template $script
-	update_config $script
+	if [ ! -f "$script.template" ]; then
+		error "missing meson template for '$script'"
+		exit 1
+	fi
+	cp "$script.template" "$script"
+	update_config "$script"
+}
+
+generate_meson_cross_files() {
+	local template_root="${1:-${MESON_CROSS_TEMPLATE_ROOT}}"
+	local output_root="${2:-${MESON_CROSS_ROOT}}"
+
+	if [ ! -d "$template_root" ]; then
+		warn "cannot find meson template directory: ${template_root}"
+		return 0
+	fi
+
+	mkdir -p "$output_root"
+
+	local ms_template ms_name ms_dst_template ms_dst
+	for ms_template in "$template_root"/*.meson.template; do
+		[ -f "$ms_template" ] || continue
+		ms_name=$(basename "$ms_template")
+		ms_dst_template="${output_root}/${ms_name}"
+		ms_dst="${ms_dst_template%.template}"
+
+		cp "$ms_template" "$ms_dst_template"
+		cp "$ms_template" "$ms_dst"
+		update_config "$ms_dst"
+	done
 }
 
 enter_pycrossenv() {
@@ -772,23 +801,7 @@ setup_rust_cross_compile() {
 		"${ohos_sysroot}/usr/lib/aarch64-linux-ohos/libgcc_s.a"
 }
 
-if [ ! -d ${CUR_DIR}/meson-scripts ]; then
-    warn "cannot find meson template directory: ${CUR_DIR}/meson-scripts"
-else
-	for ms_template in "${CUR_DIR}/meson-scripts"/*.meson.template; do
-		ms_sh="${ms_template%.*}"
-		# recover from template
-		cp $ms_sh.template $ms_sh
-		update_config $ms_sh
-	done
-    # update_config ${CUR_DIR}/meson-scripts/ohos-build.meson
-    # update_config ${CUR_DIR}/meson-scripts/scipy-build.meson
-    # update_config ${CUR_DIR}/meson-scripts/scipy-build.numpy2.meson
-    
-    # escaped_dir=$(printf '%s\n' "$CUR_DIR" | sed -e 's/[&/\]/\\&/g')
-    # sed -i "s|proj_root[[:space:]]*=[[:space:]]*'[^']*'|proj_root='$escaped_dir'|g" meson-scripts/scipy-build.meson
-    # sed -i "s|proj_root[[:space:]]*=[[:space:]]*'[^']*'|proj_root='$escaped_dir'|g" meson-scripts/scipy-build.numpy2.meson
-fi
+generate_meson_cross_files
 
 
 PY_CROSS_ROOT=${CUR_DIR}/crossenv_${OHOS_CPU}

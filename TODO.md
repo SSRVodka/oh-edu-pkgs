@@ -109,7 +109,7 @@
 - [ ] `target_root_prefix_without_pkgname` 改为 workdir 内的临时安装前缀，不能再共享 `dist.<cpu>`。
 - [ ] 成功后从 workdir 原子发布到 `dist.<cpu>.<pkg>` 或 `dist.<cpu>.<pkg>-<version>`。
 - [x] 默认 CMake/Meson build dir 改为绝对 workdir 路径，避免固定污染源码树中的 `ohos-build`；自定义包手写 build dir 后续逐步迁移。
-- [ ] Meson cross file 从模板生成到 workdir，不再并发写 `meson-scripts/*.meson`；默认 Meson 构建已改为使用 workdir 内 cross file 副本，`setup2.sh` 模板生成仍待迁移。
+- [x] Meson cross file 从模板生成到 `.ohloha/meson-cross/<api>/<cpu>/pid-<pid>/` 运行时副本，不再并发写 `meson-scripts/*.meson`；默认 Meson 构建继续复制到 workdir 后再注入包级 flags。
 
 验收：
 
@@ -251,7 +251,7 @@ boost/
 - [ ] 废弃长期复用的 `.staging/<pkg>` 构建模型。
 - [ ] 废弃 `.staging.native/`、`.staging.ndst/` 作为 native/host 缓存路径；`native_sources_root`、`native_dst_root` 变量短期作为 hook API 保留，但路径迁移到 `.ohloha/native/`。
 - [ ] 废弃 `PATCHED_BY_OHLOHA` 作为源码缓存状态标记。
-- [ ] 废弃运行时生成并提交风险较高的 `meson-scripts/*.meson`。
+- [x] 废弃运行时生成并提交风险较高的 `meson-scripts/*.meson`。
 - [ ] 废弃私有 patch 放在根目录 `patches/` 的写法。
 - [ ] 删除或停止生成 `VERSION` / `VERSIONS` 文本索引，部署脚本改用 `PKG_INDEX.json` / artifact manifest。
 - [ ] 明确哪些 legacy 命令继续支持，哪些只保留一段迁移期。

@@ -240,6 +240,19 @@ append_file_hash() {
     printf '%s\t%s\n' "$(relpath_from_project "$file")" "$(sha256_file "$file")" >> "$out"
 }
 
+normalize_build_input_value() {
+    local value="${1:-}"
+
+    if [ -n "${MESON_CROSS_ROOT:-}" ]; then
+        value="${value//${MESON_CROSS_ROOT}/__OHLOHA_MESON_CROSS_ROOT__}"
+    fi
+    if [ -n "${MESON_CROSS_FILE_BASE:-}" ]; then
+        value="${value//${MESON_CROSS_FILE_BASE}/__OHLOHA_MESON_CROSS_FILE_BASE__}"
+    fi
+
+    printf '%s' "$value"
+}
+
 resolve_patch_file() {
     local patch_ref="${1:-}"
     local build_dir="${2:-}"
@@ -440,7 +453,7 @@ compute_build_work_root() {
         printf 'pkg_config_libdir=%s\n' "${PKG_CONFIG_LIBDIR:-}"
         local var
         for var in "${PKG_VARS[@]}" "${AUTOTOOLS_VARS[@]}" "${CMAKE_VARS[@]}" "${MESON_VARS[@]}"; do
-            printf 'var:%s=%s\n' "$var" "${!var:-}"
+            printf 'var:%s=%s\n' "$var" "$(normalize_build_input_value "${!var:-}")"
         done
         sort -u "$patch_hashes" | sed 's/^/file:/'
     } > "$id_input"
@@ -680,7 +693,7 @@ print_package_cache_key() {
         printf 'python=%s\n' "$(tool_version_line python3)"
         local var
         for var in "${PKG_VARS[@]}" "${AUTOTOOLS_VARS[@]}" "${CMAKE_VARS[@]}" "${MESON_VARS[@]}"; do
-            printf 'var:%s=%s\n' "$var" "${!var:-}"
+            printf 'var:%s=%s\n' "$var" "$(normalize_build_input_value "${!var:-}")"
         done
         sort -u "$file_hashes" | sed 's/^/file:/'
     } > "$input_blob"

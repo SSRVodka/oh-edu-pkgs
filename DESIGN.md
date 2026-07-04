@@ -93,7 +93,7 @@
 - `dist.<cpu>`
 - `dist.wheels/`
 - `crossenv_<cpu>/`
-- `meson-scripts/*.meson`
+- `.ohloha/meson-cross/`
 
 最终目标是让 `.staging/<pkg>` 不再作为长期复用的构建工作区；`.staging.native/` 和 `.staging.ndst/` 也不再作为 native/host 缓存路径。`native_sources_root`、`native_dst_root` 变量可短期保留给旧 hook 使用，但应指向 `.ohloha/native/sources` 和 `.ohloha/native/dst`。
 
@@ -451,7 +451,7 @@ builder.sh --build-one \
 - 不要在没有隔离 workdir 的情况下给现有多包 `builder.sh` 加并发。
 - 不要把 `.staging/<pkg>` 是否存在当作构建成功或缓存命中的依据。
 - 不要让不同包并发写同一个 `dist.<cpu>` 中间目录。
-- 不要让不同包并发写同一个 `meson-scripts/*.meson`。
+- 不要让不同包并发写同一个 Meson cross file；运行时 cross file 应从 `meson-scripts/*.meson.template` 复制到 `.ohloha/meson-cross/` 或 workdir 后再修改。
 - 不要把整个根 `patches/` 永久纳入所有包的 cache key；这只能作为迁移期保守 fallback。
 - 不要继续扩展 `VERSION` / `VERSIONS`；未来也不要手工编辑机器生成的 `PKG_INDEX.json`。
 - 修改构建脚本后优先做语法检查，再做小包构建验证。
