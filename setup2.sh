@@ -463,8 +463,10 @@ build_mesonproj_with_deps() {
 	local _my_meson_builddir=${10:-ohos-build}
 
 	pushd $target_dir
-	mkdir -p $_my_meson_builddir
-	pushd $_my_meson_builddir
+	local _my_meson_sourcedir
+	_my_meson_sourcedir=$(readlink -f .)
+	mkdir -p "$_my_meson_builddir"
+	pushd "$_my_meson_builddir"
 
 	local dep
 	local _extra_cflags=""
@@ -509,7 +511,7 @@ build_mesonproj_with_deps() {
 		--libdir=${OHOS_LIBDIR} \
 		--buildtype=release \
 		${_my_extra_meson_flags} \
-		.. \
+		"$_my_meson_sourcedir" \
 	|| { return 1; }
 	current_build_root=$(readlink -f .)
 	if [ "x${pkg_build_type:-}" != "xcustom" ]; then
