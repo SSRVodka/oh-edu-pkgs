@@ -24,6 +24,7 @@ current_work_root=""
 current_build_id=""
 builder_no_cache=false
 builder_force_rebuild=false
+builder_keep_failed_work=false
 resolved_deps_file=""
 
 native_project_root=$(dirname "$(readlink -f "$0")")
@@ -1690,6 +1691,7 @@ build() {
         return 0;
     fi
 
+    local build_rc=0
     pushd "$build_sources_root"
 
     case "x${pkg_build_type:-}" in
@@ -1703,7 +1705,7 @@ build() {
                 "$pkg_build_parallism" \
                 "$pkg_build_autotools_configure_dir" \
                 "$pkg_build_autotools_make_install_target" \
-            || { error "build_makeproj_with_deps failed"; return 1; }
+            || { error "build_makeproj_with_deps failed"; build_rc=1; }
             ;;
         xcmake)
             build_cmakeproj_with_deps \
@@ -1717,7 +1719,7 @@ build() {
                 "$pkg_build_parallism" \
                 "$pkg_build_cmake_extra_cmake_findroot_path" \
                 "$cmake_build_dir" \
-            || { error "build_cmakeproj_with_deps failed"; return 1; }
+            || { error "build_cmakeproj_with_deps failed"; build_rc=1; }
             ;;
         xmeson)
             build_mesonproj_with_deps \
@@ -1731,12 +1733,12 @@ build() {
                 "$pkg_build_meson_extra_cmake_prefix_path" \
                 "$pkg_build_meson_extra_cmake_findroot_path" \
                 "$meson_build_dir" \
-            || { error "build_mesonproj_with_deps failed"; return 1; }
+            || { error "build_mesonproj_with_deps failed"; build_rc=1; }
             ;;
         xpure-python)
             pushd ${current_source_root}
             setup_pycrossenv
-            pip install -v --no-binary :all: . || { error "pure-python pip build failed"; destroy_pycrossenv; popd; return 1; }
+            pip install -v --no-binary :all: . || { error "pure-python pip build failed"; build_rc=1; }
             destroy_pycrossenv
             popd
             ;;
@@ -1746,6 +1748,32 @@ build() {
     esac
 
     popd
+    return "$build_rc"
+}
+
+cleanup_failed_work_root() {
+    if [ "x${builder_keep_failed_work:-false}" = "xtrue" ]; then
+        if [ -n "${current_work_root:-}" ]; then
+            info "keeping failed workdir: ${current_work_root}"
+        fi
+        return 0
+    fi
+
+    case "${current_work_root:-}" in
+        "${ohloha_root}"/work/sha256-*)
+            rm -rf "$current_work_root"
+            ;;
+    esac
+}
+
+fail_build_package() {
+    local message="${1:-}"
+
+    [ -z "$message" ] || error "$message"
+    cleanup_failed_work_root
+    restore_xcompile_flags
+    clear_vars
+    return 1
 }
 
 build_package() {
@@ -1765,30 +1793,32 @@ build_package() {
     LD_LIBRARY_PATH="${native_dst_root}/lib:$LD_LIBRARY_PATH"
     
     post_configure_hook() { :; }
+    current_source_url=""
+    current=""
+    sources_root=""
+    current_source_root=""
+    current_build_root=""
+    target_root_prefix_without_pkgname=""
+    target_root_with_pkgname=""
+    current_source_fresh=false
+    current_build_id=""
+    current_work_root=""
 
     source "$build_file"
-    setup || { error "setup() failed"; restore_xcompile_flags; clear_vars; return 1; }
-    validate_config || { restore_xcompile_flags; clear_vars; return 1; }
+    setup || { fail_build_package "setup() failed"; return 1; }
+    validate_config || { fail_build_package ""; return 1; }
     
     # setup local variables for hooks
     current_source_url="$pkg_source_url"
     current="$(dirname $(readlink -f $build_file))"
     sources_root="${SRC_ROOT}"
     current_source_root="${SRC_ROOT}/${pkg_name}"
-    current_build_root=""
-    target_root_prefix_without_pkgname=""
-    target_root_with_pkgname=""
-    current_source_fresh=false
-    current_build_id=""
     current_work_root=$(compute_build_work_root "$build_file") || {
-        error "compute_build_work_root for '$build_file' failed"
-        restore_xcompile_flags
-        clear_vars
+        fail_build_package "compute_build_work_root for '$build_file' failed"
         return 1
     }
     current_build_id=$(build_id_from_work_root "$current_work_root") || {
-        restore_xcompile_flags
-        clear_vars
+        fail_build_package ""
         return 1
     }
     if [ "x${builder_no_cache:-false}" != "xtrue" ] && [ "x${builder_force_rebuild:-false}" != "xtrue" ]; then
@@ -1809,21 +1839,18 @@ build_package() {
         rm -rf "${current_source_root}"
     fi
     if [ ! -d "${current_source_root}" ]; then
-        download || { error "download for '$build_file' failed"; restore_xcompile_flags; clear_vars; return 1; }
+        download || { fail_build_package "download for '$build_file' failed"; return 1; }
     fi
 
     local recomputed_work_root
     recomputed_work_root=$(compute_build_work_root "$build_file") || {
-        error "compute_build_work_root for '$build_file' failed after download"
-        restore_xcompile_flags
-        clear_vars
+        fail_build_package "compute_build_work_root for '$build_file' failed after download"
         return 1
     }
     if [ "$recomputed_work_root" != "$current_work_root" ]; then
         current_work_root="$recomputed_work_root"
         current_build_id=$(build_id_from_work_root "$current_work_root") || {
-            restore_xcompile_flags
-            clear_vars
+            fail_build_package ""
             return 1
         }
         target_root_prefix_without_pkgname="${current_work_root}/install/dist.${OHOS_CPU}"
@@ -1843,26 +1870,22 @@ build_package() {
     local legacy_source_root="$current_source_root"
     print_vars
     if [ ! -f "${current_source_root}/PATCHED_BY_OHLOHA" ]; then
-        prebuilt_patch_once_hook || { error "prebuilt_patch_once_hook for '$build_file' failed"; restore_xcompile_flags; clear_vars; return 1; }
+        prebuilt_patch_once_hook || { fail_build_package "prebuilt_patch_once_hook for '$build_file' failed"; return 1; }
         touch "${current_source_root}/PATCHED_BY_OHLOHA"
     fi
     if [ "x${current_source_fresh:-false}" = "xtrue" ]; then
         publish_patched_source_snapshot "$build_file" "$current_source_root" || {
-            error "publish_patched_source_snapshot for '$build_file' failed"
-            restore_xcompile_flags
-            clear_vars
+            fail_build_package "publish_patched_source_snapshot for '$build_file' failed"
             return 1
         }
     fi
     prepare_work_source_root "$build_file" "$legacy_source_root" || {
-        error "prepare_work_source_root for '$build_file' failed"
-        restore_xcompile_flags
-        clear_vars
+        fail_build_package "prepare_work_source_root for '$build_file' failed"
         return 1
     }
-    prebuilt_patch_hook || { error "prebuilt_patch_hook for '$build_file' failed"; restore_xcompile_flags; clear_vars; return 1; }
-    build "$build_file" || { error "Build $build_file failed"; restore_xcompile_flags; clear_vars; return 1; }
-    postbuilt_hook || { error "postbuilt_hook for '$build_file' failed"; restore_xcompile_flags; clear_vars; return 1; }
+    prebuilt_patch_hook || { fail_build_package "prebuilt_patch_hook for '$build_file' failed"; return 1; }
+    build "$build_file" || { fail_build_package "Build $build_file failed"; return 1; }
+    postbuilt_hook || { fail_build_package "postbuilt_hook for '$build_file' failed"; return 1; }
 
     # copy & trigger POSTINST script here: for installation at ${target_root_with_pkgname}
 	for name in postinst POSTINST PostInst; do
@@ -1879,25 +1902,19 @@ build_package() {
     local publish_payload_dir
     publish_payload_dir="${current_work_root}/publish/dist.${OHOS_CPU}.${pkg_name}"
     prepare_pkg_for_legacy_dst "$pkg_name" "$target_root_with_pkgname" "$publish_payload_dir" "$(get_pkg_legacy_dst_dir "$pkg_name")" || {
-        error "prepare_pkg_for_legacy_dst for '$build_file' failed"
-        restore_xcompile_flags
-        clear_vars
+        fail_build_package "prepare_pkg_for_legacy_dst for '$build_file' failed"
         return 1
     }
 
     if [ "x${builder_no_cache:-false}" != "xtrue" ]; then
         write_artifact_cache "$build_file" "$publish_payload_dir" "$current_build_id" || {
-            error "write_artifact_cache for '$build_file' failed"
-            restore_xcompile_flags
-            clear_vars
+            fail_build_package "write_artifact_cache for '$build_file' failed"
             return 1
         }
     fi
 
     publish_prepared_pkg_to_legacy_dst "$pkg_name" "$publish_payload_dir" || {
-        error "publish_prepared_pkg_to_legacy_dst for '$build_file' failed"
-        restore_xcompile_flags
-        clear_vars
+        fail_build_package "publish_prepared_pkg_to_legacy_dst for '$build_file' failed"
         return 1
     }
 
@@ -1938,6 +1955,10 @@ main() {
                 builder_force_rebuild=true
                 shift
                 ;;
+            --keep-failed-work)
+                builder_keep_failed_work=true
+                shift
+                ;;
             --resolved-deps=*)
                 resolved_deps_file="${1#--resolved-deps=}"
                 shift
@@ -1973,7 +1994,7 @@ main() {
         esac
     done
 
-    [[ $# -eq 0 ]] && echo "Usage: $0 [--print-meta] [--cache-key] [--build-one] [--resolved-deps=FILE] [--no-cache] [--force-rebuild] [--continue-on-fail] [--cpu=aarch64|arm|x86_64] <BUILD_FILE> [BUILD_FILE...]" && exit 1
+    [[ $# -eq 0 ]] && echo "Usage: $0 [--print-meta] [--cache-key] [--build-one] [--resolved-deps=FILE] [--no-cache] [--force-rebuild] [--keep-failed-work] [--continue-on-fail] [--cpu=aarch64|arm|x86_64] <BUILD_FILE> [BUILD_FILE...]" && exit 1
 
     if [ "$PRINT_META" = true ]; then
         if [ "$#" -ne 1 ]; then
