@@ -106,8 +106,8 @@
 - [ ] 每次 cache miss 从 patched source snapshot 复制、硬链接或 reflink 到 `.ohloha/work/<build-id>/src-root/<pkg_name>`；当前已优先使用 snapshot，缺失 snapshot 时仍 fallback 到 legacy source。
 - [x] `current_source_root` 指向 workdir 内源码副本。
 - [x] `sources_root` 指向 workdir 内 `src-root`，兼容现有 hook 中以 `${sources_root}` 为 patch 根的写法。
-- [ ] `target_root_prefix_without_pkgname` 改为 workdir 内的临时安装前缀，不能再共享 `dist.<cpu>`。
-- [ ] 成功后从 workdir 原子发布到 `dist.<cpu>.<pkg>` 或 `dist.<cpu>.<pkg>-<version>`。
+- [x] `target_root_prefix_without_pkgname` 改为 workdir 内的临时安装前缀，不能再共享 `dist.<cpu>`。
+- [x] 成功后从 workdir 发布到 legacy `dist.<cpu>.<pkg>`；versioned dist 后续随多版本模型补齐。
 - [x] 默认 CMake/Meson build dir 改为绝对 workdir 路径，避免固定污染源码树中的 `ohos-build`；自定义包手写 build dir 后续逐步迁移。
 - [x] Meson cross file 从模板生成到 `.ohloha/meson-cross/<api>/<cpu>/pid-<pid>/` 运行时副本，不再并发写 `meson-scripts/*.meson`；默认 Meson 构建继续复制到 workdir 后再注入包级 flags。
 

@@ -273,14 +273,19 @@ build_makeproj_with_deps() {
 	local OLD_CPPFLAGS="$CPPFLAGS"
 	local OLD_LDFLAGS="$LDFLAGS"
 	local OLD_PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR"
+	local install_prefix="${target_root_prefix_without_pkgname:-${TARGET_ROOT}}"
+	local install_dir
+	install_dir=$(get_pkg_install_dir "$target_dir")
 
 	pushd "$configure_dir"
 
 	local dep
 	for dep in $deps; do
-		CFLAGS="-I${TARGET_ROOT}.${dep}/include ${CFLAGS}"
-		LDFLAGS="-L${TARGET_ROOT}.${dep}/${OHOS_LIBDIR} ${LDFLAGS}"
-		PKG_CONFIG_LIBDIR="${TARGET_ROOT}.${dep}/${OHOS_LIBDIR}/pkgconfig:$PKG_CONFIG_LIBDIR"
+		local dep_prefix
+		dep_prefix=$(get_pkg_dst_dir "$dep")
+		CFLAGS="-I${dep_prefix}/include ${CFLAGS}"
+		LDFLAGS="-L${dep_prefix}/${OHOS_LIBDIR} ${LDFLAGS}"
+		PKG_CONFIG_LIBDIR="${dep_prefix}/${OHOS_LIBDIR}/pkgconfig:$PKG_CONFIG_LIBDIR"
 	done
 
 	CXXFLAGS="$CFLAGS"
@@ -303,8 +308,8 @@ build_makeproj_with_deps() {
 		return 1
 	fi
 
-	configure_flags="${extra_configure_flags} --prefix=${TARGET_ROOT}"
-	configure_flags="${configure_flags} --libdir=${TARGET_ROOT}/${OHOS_LIBDIR}"
+	configure_flags="${extra_configure_flags} --prefix=${install_prefix}"
+	configure_flags="${configure_flags} --libdir=${install_prefix}/${OHOS_LIBDIR}"
 
 	if ! supports_all_options $configure_exe "--prefix" "--libdir"; then
 		warn "configure file for ${target_dir} doesn't support --prefix/--libdir? It may cause some problems... Remember to check output directory afterwards :("
@@ -346,23 +351,23 @@ build_makeproj_with_deps() {
 	PKG_CONFIG_LIBDIR="$OLD_PKG_CONFIG_LIBDIR"
 
 	popd
-	if [ -d ${TARGET_ROOT}.${target_dir} ]; then
+	if [ -d "$install_dir" ]; then
 		# merge directory
-		cp -r ${TARGET_ROOT}/* ${TARGET_ROOT}.${target_dir}/
-		rm -rf ${TARGET_ROOT}
+		cp -r ${install_prefix}/* "$install_dir"/
+		rm -rf ${install_prefix}
 	else
-		mv ${TARGET_ROOT} ${TARGET_ROOT}.${target_dir}
+		mv ${install_prefix} "$install_dir"
 	fi
-	local dst_dir=${TARGET_ROOT}.${target_dir}/${OHOS_LIBDIR}
+	local dst_dir=${install_dir}/${OHOS_LIBDIR}
 	if [ ! -d "$dst_dir" ]; then
 		warn "library '$target_dir' doesn't have an arch-dependent library directory '$dst_dir'"
 	else
 		patch_libdir_origin $target_dir
 	fi
 	# some package configs may locate in share/: like xorg, asio (header-only)
-	sharedir=${TARGET_ROOT}.${target_dir}/share
+	sharedir=${install_dir}/share
 	if [ -d $sharedir ]; then
-		patch_libdir_origin $target_dir "" "" "${TARGET_ROOT}.${target_dir}/share"
+		patch_libdir_origin $target_dir "" "" "${install_dir}/share"
 	fi
 }
 
@@ -387,10 +392,14 @@ build_cmakeproj_with_deps() {
 	local _extra_cmakeprefix=""
 	local _extra_cmakefindroot="$_my_extra_cmake_findroot"
 	local OLD_PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR"
+	local install_dir
+	install_dir=$(get_pkg_install_dir "$target_dir")
 	for dep in $deps; do
-		_extra_cflags="-I${TARGET_ROOT}.${dep}/include ${_extra_cflags}"
-		_extra_ldflags="-L${TARGET_ROOT}.${dep}/${OHOS_LIBDIR} ${_extra_ldflags}"
-		local _tmp_cmakedir="${TARGET_ROOT}.${dep}/${OHOS_LIBDIR}/cmake"
+		local dep_prefix
+		dep_prefix=$(get_pkg_dst_dir "$dep")
+		_extra_cflags="-I${dep_prefix}/include ${_extra_cflags}"
+		_extra_ldflags="-L${dep_prefix}/${OHOS_LIBDIR} ${_extra_ldflags}"
+		local _tmp_cmakedir="${dep_prefix}/${OHOS_LIBDIR}/cmake"
 		if [ -d "$_tmp_cmakedir" ]; then
 			# non-recursive
 			for _item in "$_tmp_cmakedir"/*; do
@@ -400,8 +409,8 @@ build_cmakeproj_with_deps() {
 				_extra_cmakeprefix="$_item;${_extra_cmakeprefix}"
 			done
 		fi
-		_extra_cmakefindroot="${TARGET_ROOT}.${dep};${_extra_cmakefindroot}"
-		PKG_CONFIG_LIBDIR="${TARGET_ROOT}.${dep}/${OHOS_LIBDIR}/pkgconfig:$PKG_CONFIG_LIBDIR"
+		_extra_cmakefindroot="${dep_prefix};${_extra_cmakefindroot}"
+		PKG_CONFIG_LIBDIR="${dep_prefix}/${OHOS_LIBDIR}/pkgconfig:$PKG_CONFIG_LIBDIR"
 	done
 
 	info "common c flags appended: $_extra_cflags $_my_extra_cflags"
@@ -419,7 +428,7 @@ build_cmakeproj_with_deps() {
 		-DSSRVODKA_APPEND_C_PREPROCESSOR_FLAGS="$_my_extra_cppflags" \
 		-DSSRVODKA_APPEND_CMAKE_FIND_ROOT_PATH="$_extra_cmakefindroot" \
 		-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_CONFIG} \
-		-DCMAKE_INSTALL_PREFIX=${TARGET_ROOT}.${target_dir} \
+		-DCMAKE_INSTALL_PREFIX=${install_dir} \
 		-DCMAKE_INSTALL_LIBDIR=${OHOS_LIBDIR} \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_VERBOSE_MAKEFILE=ON \
@@ -437,16 +446,16 @@ build_cmakeproj_with_deps() {
 	PKG_CONFIG_LIBDIR="$OLD_PKG_CONFIG_LIBDIR"
 	popd
 
-	local dst_archlibdir=${TARGET_ROOT}.${target_dir}/${OHOS_LIBDIR}
+	local dst_archlibdir=${install_dir}/${OHOS_LIBDIR}
 	if [ ! -d "$dst_archlibdir" ]; then
 		warn "library '$target_dir' doesn't have an arch-dependent library directory '$dst_archlibdir'"
 	else
 		patch_libdir_origin $target_dir
 	fi
 	# some package configs may locate in share/: like xorg, asio (header-only)
-	sharedir=${TARGET_ROOT}.${target_dir}/share
+	sharedir=${install_dir}/share
 	if [ -d $sharedir ]; then
-		patch_libdir_origin $target_dir "" "" "${TARGET_ROOT}.${target_dir}/share"
+		patch_libdir_origin $target_dir "" "" "${install_dir}/share"
 	fi
 }
 
@@ -474,10 +483,14 @@ build_mesonproj_with_deps() {
 	local _extra_cmakeprefix=""
 	local _extra_cmakefindroot="$_my_extra_cmake_findroot"
 	local OLD_PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR"
+	local install_dir
+	install_dir=$(get_pkg_install_dir "$target_dir")
 	for dep in $deps; do
-		_extra_cflags="-I${TARGET_ROOT}.${dep}/include ${_extra_cflags}"
-		_extra_ldflags="-L${TARGET_ROOT}.${dep}/${OHOS_LIBDIR} ${_extra_ldflags}"
-		local _tmp_cmakedir="${TARGET_ROOT}.${dep}/${OHOS_LIBDIR}/cmake"
+		local dep_prefix
+		dep_prefix=$(get_pkg_dst_dir "$dep")
+		_extra_cflags="-I${dep_prefix}/include ${_extra_cflags}"
+		_extra_ldflags="-L${dep_prefix}/${OHOS_LIBDIR} ${_extra_ldflags}"
+		local _tmp_cmakedir="${dep_prefix}/${OHOS_LIBDIR}/cmake"
 		if [ -d "$_tmp_cmakedir" ]; then
 			# non-recursive
 			for _item in "$_tmp_cmakedir"/*; do
@@ -487,8 +500,8 @@ build_mesonproj_with_deps() {
 				_extra_cmakeprefix="$_item;${_extra_cmakeprefix}"
 			done
 		fi
-		_extra_cmakefindroot="${TARGET_ROOT}.${dep};${_extra_cmakefindroot}"
-		PKG_CONFIG_LIBDIR="${TARGET_ROOT}.${dep}/${OHOS_LIBDIR}/pkgconfig:$PKG_CONFIG_LIBDIR"
+		_extra_cmakefindroot="${dep_prefix};${_extra_cmakefindroot}"
+		PKG_CONFIG_LIBDIR="${dep_prefix}/${OHOS_LIBDIR}/pkgconfig:$PKG_CONFIG_LIBDIR"
 	done
 
 	info "pkgconfig libdir: ${PKG_CONFIG_LIBDIR}"
@@ -507,7 +520,7 @@ build_mesonproj_with_deps() {
 
 	meson setup --reconfigure \
 		--cross-file=$meson_cross_file \
-		--prefix=${TARGET_ROOT}.${target_dir} \
+		--prefix=${install_dir} \
 		--libdir=${OHOS_LIBDIR} \
 		--buildtype=release \
 		${_my_extra_meson_flags} \
@@ -525,16 +538,16 @@ build_mesonproj_with_deps() {
 	popd
 	popd
 
-	local dst_archlibdir=${TARGET_ROOT}.${target_dir}/${OHOS_LIBDIR}
+	local dst_archlibdir=${install_dir}/${OHOS_LIBDIR}
 	if [ ! -d "$dst_archlibdir" ]; then
 		warn "library '$target_dir' doesn't have an arch-dependent library directory '$dst_archlibdir'"
 	else
 		patch_libdir_origin $target_dir
 	fi
 	# some package configs may locate in share/: like xorg, asio (header-only)
-	sharedir=${TARGET_ROOT}.${target_dir}/share
+	sharedir=${install_dir}/share
 	if [ -d $sharedir ]; then
-		patch_libdir_origin $target_dir "" "" "${TARGET_ROOT}.${target_dir}/share"
+		patch_libdir_origin $target_dir "" "" "${install_dir}/share"
 	fi
 }
 
@@ -547,7 +560,7 @@ patch_libdir_origin() {
 	local dst_archlib_dir_override=${4:-}
 
 	if [ -z "$dst_prefix" ]; then
-		dst_prefix=${TARGET_ROOT}.${target_dir}
+		dst_prefix=$(get_pkg_dst_dir "$target_dir")
 	fi
 	local dst_archlib_dir=${dst_prefix}/${OHOS_LIBDIR}
 	if [ -n "$dst_archlib_dir_override" ]; then

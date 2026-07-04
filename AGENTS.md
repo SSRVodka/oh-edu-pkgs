@@ -43,8 +43,8 @@
 
 - `.staging/`：目标源码缓存，源码目录为 `.staging/<pkg_name>`。
 - `.ohloha/native/sources/`、`.ohloha/native/dst/`：native/host 构建缓存和工具输出。`native_sources_root`、`native_dst_root` 变量短期保留给旧 hook 使用，但路径不再指向旧 `.staging.*`。
-- `dist.<cpu>.<pkg>`：单包目标输出目录，例如 `dist.aarch64.openssl`。
-- `dist.<cpu>`：构建中间安装前缀，成功后通常被移动/合并到 `dist.<cpu>.<pkg>`。
+- `dist.<cpu>.<pkg>`：legacy 单包目标输出目录，例如 `dist.aarch64.openssl`。当前构建先安装到 `.ohloha/work/<build-id>/install/` 下的临时前缀，成功后再发布到该 legacy 目录。
+- `dist.<cpu>`：旧共享中间安装前缀；新默认 helper 不应继续把当前包安装到这里。
 - `dist.wheels/`、`crossenv_<cpu>/`、`deploy/`。
 - `.ohloha/meson-cross/`：由 `setup2.sh` 从 `meson-scripts/*.meson.template` 生成的运行时 Meson cross file 副本。`meson-scripts/` 下只维护模板，不应生成或提交可变 `.meson` 文件。
 - `PKG_INDEX.json`：未来用于替代 `VERSION` / `VERSIONS` 的机器可读包索引。`VERSION` / `VERSIONS` 文本清单视为旧方案，后续可以废弃，不需要为新重构保持兼容。

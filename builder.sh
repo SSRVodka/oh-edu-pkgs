@@ -71,21 +71,71 @@ get_native_src_root() {
 }
 
 # Get the build output directory (in staging area) of the specific package
-get_pkg_dst_dir() {
+get_pkg_legacy_dst_dir() {
     printf '%s.%s' "${TARGET_ROOT}" "${1:-}"
+}
+
+get_pkg_dst_dir() {
+    local name="${1:-}"
+    local work_dst=""
+
+    if [ -n "${target_root_prefix_without_pkgname:-}" ]; then
+        work_dst="${target_root_prefix_without_pkgname}.${name}"
+        if [ -d "$work_dst" ]; then
+            printf '%s' "$work_dst"
+            return 0
+        fi
+    fi
+
+    get_pkg_legacy_dst_dir "$name"
+}
+
+get_pkg_install_dir() {
+    local name="${1:-}"
+    if [ -n "${target_root_prefix_without_pkgname:-}" ]; then
+        printf '%s.%s' "${target_root_prefix_without_pkgname}" "$name"
+    else
+        get_pkg_legacy_dst_dir "$name"
+    fi
 }
 
 # Move (merge) package $1 from $2 (default ${target_root_prefix_without_pkgname}, output internal directory) to ${target_root_with_pkgname}
 mv_pkg_to_dst_dir() {
     local _pkg_name="${1:-}"
     local _pkg_src="${2:-${target_root_prefix_without_pkgname}}"
-    local _pkg_dst="${target_root_with_pkgname}"
+    local _pkg_dst
+    _pkg_dst=$(get_pkg_install_dir "$_pkg_name")
     if [ -d "$_pkg_dst" ]; then
         cp -r ${_pkg_src}/* ${_pkg_dst}/
         rm -rf ${_pkg_src}
     else
         mv ${_pkg_src} ${_pkg_dst}
     fi
+}
+
+publish_pkg_to_legacy_dst() {
+    local _pkg_name="${1:-${pkg_name:-}}"
+    local _pkg_src="${2:-${target_root_with_pkgname:-}}"
+    local _pkg_dst
+
+    [ -n "$_pkg_name" ] || { error "publish_pkg_to_legacy_dst: empty package name"; return 1; }
+    [ -n "$_pkg_src" ] || { error "publish_pkg_to_legacy_dst: empty source path"; return 1; }
+    if [ ! -d "$_pkg_src" ]; then
+        error "publish_pkg_to_legacy_dst: source directory not found: '$_pkg_src'"
+        return 1
+    fi
+
+    _pkg_dst=$(get_pkg_legacy_dst_dir "$_pkg_name")
+    if [ "$(readlink -f "$_pkg_src")" = "$(readlink -m "$_pkg_dst")" ]; then
+        return 0
+    fi
+
+    local _tmp_dst
+    _tmp_dst="${_pkg_dst}.tmp.$$"
+    rm -rf "$_tmp_dst"
+    cp -a "$_pkg_src" "$_tmp_dst"
+    rm -rf "$_pkg_dst"
+    mv "$_tmp_dst" "$_pkg_dst"
 }
 
 # Variable definitions
@@ -1195,8 +1245,8 @@ build_package() {
     sources_root="${SRC_ROOT}"
     current_source_root="${SRC_ROOT}/${pkg_name}"
     current_build_root=""
-    target_root_prefix_without_pkgname="${TARGET_ROOT}"
-    target_root_with_pkgname="$(get_pkg_dst_dir $pkg_name)"
+    target_root_prefix_without_pkgname=""
+    target_root_with_pkgname=""
     current_source_fresh=false
     current_work_root=$(compute_build_work_root "$build_file") || {
         error "compute_build_work_root for '$build_file' failed"
@@ -1205,6 +1255,9 @@ build_package() {
         return 1
     }
     mkdir -p "$current_work_root"
+    target_root_prefix_without_pkgname="${current_work_root}/install/dist.${OHOS_CPU}"
+    target_root_with_pkgname="$(get_pkg_install_dir "$pkg_name")"
+    rm -rf "${target_root_prefix_without_pkgname}" "${target_root_with_pkgname}"
 
     # download if ${current_source_root} doesn't exist or flushed using optional pkg_force_clean_build
     if [ -n "${pkg_force_clean_build:-}" ]; then
@@ -1249,6 +1302,13 @@ build_package() {
 			break
 		fi
 	done
+
+    publish_pkg_to_legacy_dst "$pkg_name" "$target_root_with_pkgname" || {
+        error "publish_pkg_to_legacy_dst for '$build_file' failed"
+        restore_xcompile_flags
+        clear_vars
+        return 1
+    }
 
     restore_xcompile_flags
     clear_vars
