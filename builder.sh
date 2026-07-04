@@ -22,6 +22,8 @@ target_root_prefix_without_pkgname=""
 current_source_fresh=false
 current_work_root=""
 current_build_id=""
+builder_no_cache=false
+builder_force_rebuild=false
 
 native_project_root=$(dirname "$(readlink -f "$0")")
 ohloha_root=${native_project_root}/.ohloha
@@ -770,6 +772,113 @@ write_artifact_cache() {
     fi
 }
 
+manifest_json_field() {
+    local manifest_path="${1:-}"
+    local field="${2:-}"
+
+    [ -f "$manifest_path" ] || return 1
+    [ -n "$field" ] || return 1
+    python3 - "$manifest_path" "$field" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    value = json.load(f).get(sys.argv[2], "")
+if value is None:
+    value = ""
+print(value)
+PY
+}
+
+verify_artifact_cache() {
+    local build_id="${1:-${current_build_id:-}}"
+    local artifact_dir manifest_path payload_path success_path manifest_build_id manifest_payload manifest_payload_sha actual_payload_sha
+
+    artifact_dir=$(get_artifact_dir "$build_id") || return 1
+    manifest_path="${artifact_dir}/manifest.json"
+    payload_path="${artifact_dir}/payload.tar.zst"
+    success_path="${artifact_dir}/success"
+
+    [ -f "$manifest_path" ] || return 1
+    [ -f "$payload_path" ] || return 1
+    [ -f "$success_path" ] || return 1
+
+    if ! manifest_build_id=$(manifest_json_field "$manifest_path" build_id); then
+        warn "cache manifest is not valid JSON: ${manifest_path}"
+        return 1
+    fi
+    if [ "$manifest_build_id" != "$build_id" ]; then
+        warn "cache manifest build_id mismatch: ${manifest_path}"
+        return 1
+    fi
+
+    manifest_payload=$(manifest_json_field "$manifest_path" payload || true)
+    if [ "$manifest_payload" != "payload.tar.zst" ]; then
+        warn "cache manifest payload mismatch: ${manifest_path}"
+        return 1
+    fi
+
+    manifest_payload_sha=$(manifest_json_field "$manifest_path" payload_sha256 || true)
+    manifest_payload_sha="${manifest_payload_sha#sha256:}"
+    if [ -z "$manifest_payload_sha" ]; then
+        warn "cache manifest has empty payload sha256: ${manifest_path}"
+        return 1
+    fi
+    actual_payload_sha=$(sha256_file "$payload_path")
+    if [ "$actual_payload_sha" != "$manifest_payload_sha" ]; then
+        warn "cache payload sha256 mismatch: ${payload_path}"
+        return 1
+    fi
+
+    if ! tar --zstd -tf "$payload_path" >/dev/null; then
+        warn "cache payload is not readable: ${payload_path}"
+        return 1
+    fi
+}
+
+restore_artifact_cache_unlocked() {
+    local build_id="${1:-${current_build_id:-}}"
+    local pkg="${2:-${pkg_name:-}}"
+    local artifact_dir payload_path dst tmp_dst path_component
+
+    [ -n "$pkg" ] || { error "restore_artifact_cache: empty package name"; return 1; }
+    if ! verify_artifact_cache "$build_id"; then
+        return 1
+    fi
+
+    artifact_dir=$(get_artifact_dir "$build_id") || return 1
+    payload_path="${artifact_dir}/payload.tar.zst"
+    dst=$(get_pkg_legacy_dst_dir "$pkg")
+    tmp_dst="${dst}.tmp.$$"
+    path_component=$(artifact_path_component_for_build_id "$build_id") || return 1
+
+    rm -rf "$tmp_dst"
+    mkdir -p "$tmp_dst"
+    if ! tar --zstd -xf "$payload_path" -C "$tmp_dst"; then
+        rm -rf "$tmp_dst"
+        return 1
+    fi
+    rm -rf "$dst"
+    if ! mv "$tmp_dst" "$dst"; then
+        rm -rf "$tmp_dst"
+        return 1
+    fi
+    info "cache hit: ${path_component}"
+}
+
+restore_artifact_cache() {
+    local build_id="${1:-${current_build_id:-}}"
+    local pkg="${2:-${pkg_name:-}}"
+    local path_component
+
+    path_component=$(artifact_path_component_for_build_id "$build_id") || return 1
+    if declare -F with_ohloha_lock >/dev/null 2>&1; then
+        with_ohloha_lock "artifact-${path_component}" restore_artifact_cache_unlocked "$build_id" "$pkg"
+    else
+        restore_artifact_cache_unlocked "$build_id" "$pkg"
+    fi
+}
+
 write_build_fingerprint_input() {
     local build_file="${1:-}"
     local input_out="${2:-}"
@@ -1504,6 +1613,14 @@ build_package() {
         clear_vars
         return 1
     }
+    if [ "x${builder_no_cache:-false}" != "xtrue" ] && [ "x${builder_force_rebuild:-false}" != "xtrue" ]; then
+        if restore_artifact_cache "$current_build_id" "$pkg_name"; then
+            restore_xcompile_flags
+            clear_vars
+            info "Build $build_file completed from cache"
+            return 0
+        fi
+    fi
     mkdir -p "$current_work_root"
     target_root_prefix_without_pkgname="${current_work_root}/install/dist.${OHOS_CPU}"
     target_root_with_pkgname="$(get_pkg_install_dir "$pkg_name")"
@@ -1531,9 +1648,17 @@ build_package() {
             clear_vars
             return 1
         }
-        mkdir -p "$current_work_root"
         target_root_prefix_without_pkgname="${current_work_root}/install/dist.${OHOS_CPU}"
         target_root_with_pkgname="$(get_pkg_install_dir "$pkg_name")"
+        if [ "x${builder_no_cache:-false}" != "xtrue" ] && [ "x${builder_force_rebuild:-false}" != "xtrue" ]; then
+            if restore_artifact_cache "$current_build_id" "$pkg_name"; then
+                restore_xcompile_flags
+                clear_vars
+                info "Build $build_file completed from cache"
+                return 0
+            fi
+        fi
+        mkdir -p "$current_work_root"
         rm -rf "${target_root_prefix_without_pkgname}" "${target_root_with_pkgname}"
     fi
 
@@ -1580,12 +1705,14 @@ build_package() {
         return 1
     }
 
-    write_artifact_cache "$build_file" "$(get_pkg_legacy_dst_dir "$pkg_name")" "$current_build_id" || {
-        error "write_artifact_cache for '$build_file' failed"
-        restore_xcompile_flags
-        clear_vars
-        return 1
-    }
+    if [ "x${builder_no_cache:-false}" != "xtrue" ]; then
+        write_artifact_cache "$build_file" "$(get_pkg_legacy_dst_dir "$pkg_name")" "$current_build_id" || {
+            error "write_artifact_cache for '$build_file' failed"
+            restore_xcompile_flags
+            clear_vars
+            return 1
+        }
+    fi
 
     restore_xcompile_flags
     clear_vars
@@ -1616,6 +1743,14 @@ main() {
                 BUILD_ONE=true
                 shift
                 ;;
+            --no-cache)
+                builder_no_cache=true
+                shift
+                ;;
+            --force-rebuild)
+                builder_force_rebuild=true
+                shift
+                ;;
             --continue-on-fail)
                 CONTINUE_ON_FAIL=true
                 shift
@@ -1638,7 +1773,7 @@ main() {
         esac
     done
 
-    [[ $# -eq 0 ]] && echo "Usage: $0 [--print-meta] [--cache-key] [--build-one] [--continue-on-fail] [--cpu=aarch64|arm|x86_64] <BUILD_FILE> [BUILD_FILE...]" && exit 1
+    [[ $# -eq 0 ]] && echo "Usage: $0 [--print-meta] [--cache-key] [--build-one] [--no-cache] [--force-rebuild] [--continue-on-fail] [--cpu=aarch64|arm|x86_64] <BUILD_FILE> [BUILD_FILE...]" && exit 1
 
     if [ "$PRINT_META" = true ]; then
         if [ "$#" -ne 1 ]; then

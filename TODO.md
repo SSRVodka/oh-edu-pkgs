@@ -126,10 +126,10 @@
 - [x] 定义 `build-id` 计算规则，并让 workdir、`--cache-key` 和 artifact 共享同一 fingerprint 输入。
 - [x] artifact manifest 初版记录 `name`、`version`、`arch`、`ohos_api`、`build_id`、`source_sha256`、`build_file_sha256`、`patch_hashes`、`dependency_artifacts` 占位和 toolchain/environment 信息。
 - [x] 构建成功后写入 `.ohloha/artifacts/<build-id>/manifest.json`、`payload.tar.zst`、`success`。
-- [ ] cache hit 时恢复 artifact 到目标 `dist`，不执行 download、patch、configure、make、POSTINST。
-- [ ] cache hit 前校验 manifest 和 payload 完整性。
+- [x] cache hit 时恢复 artifact 到目标 `dist`，不执行 download、patch、configure、make、POSTINST。
+- [x] cache hit 前校验 manifest 和 payload 完整性。
 - [ ] 构建失败不写 `success`，不发布半成品 dist。
-- [ ] 新增 `--no-cache`、`--force-rebuild`、`--keep-failed-work` 等调试选项。
+- [ ] 新增调试选项；已支持 `--no-cache`、`--force-rebuild`，待补 `--keep-failed-work`。
 - [ ] 缓存 key 包含已解析依赖的 artifact id，而不是仅依赖名。
 
 fingerprint 至少包含：
