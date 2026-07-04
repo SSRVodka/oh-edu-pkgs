@@ -21,18 +21,20 @@ target_root_with_pkgname=""
 target_root_prefix_without_pkgname=""
 current_source_fresh=false
 current_work_root=""
+current_build_id=""
 
 native_project_root=$(dirname "$(readlink -f "$0")")
 ohloha_root=${native_project_root}/.ohloha
 download_cache_root=${ohloha_root}/downloads
 source_cache_root=${ohloha_root}/sources
+artifact_cache_root=${ohloha_root}/artifacts
 native_cache_root=${ohloha_root}/native
 native_sources_root=${native_cache_root}/sources
 # ${native_dst_root}/bin will be added to PATH and ${native_dst_root}/lib
 # will be added to LD_LIBRARY_PATH when executing build_package
 # TODO: move host-python to here
 native_dst_root=${native_cache_root}/dst
-mkdir -p "${download_cache_root}" "${source_cache_root}" "${native_sources_root}" "${native_dst_root}"
+mkdir -p "${download_cache_root}" "${source_cache_root}" "${artifact_cache_root}" "${native_sources_root}" "${native_dst_root}"
 
 
 # Validation rules
@@ -539,6 +541,233 @@ compute_build_work_root() {
     digest=$(sha256_file "$id_input")
     printf '%s/work/sha256-%s' "$ohloha_root" "$digest"
     cleanup_build_work_tmp
+}
+
+build_id_from_work_root() {
+    local work_root="${1:-}"
+    local work_name
+
+    [ -n "$work_root" ] || { error "build_id_from_work_root: empty work root"; return 1; }
+    work_name=$(basename "$work_root")
+    case "$work_name" in
+        sha256-*)
+            printf 'sha256:%s' "${work_name#sha256-}"
+            ;;
+        *)
+            error "build_id_from_work_root: unsupported work root '$work_root'"
+            return 1
+            ;;
+    esac
+}
+
+artifact_path_component_for_build_id() {
+    local build_id="${1:-}"
+
+    case "$build_id" in
+        sha256:*)
+            printf 'sha256-%s' "${build_id#sha256:}"
+            ;;
+        sha256-*)
+            printf '%s' "$build_id"
+            ;;
+        *)
+            error "artifact_path_component_for_build_id: unsupported build id '$build_id'"
+            return 1
+            ;;
+    esac
+}
+
+get_artifact_dir() {
+    local build_id="${1:-${current_build_id:-}}"
+    local path_component
+
+    [ -n "$build_id" ] || { error "get_artifact_dir: empty build id"; return 1; }
+    path_component=$(artifact_path_component_for_build_id "$build_id") || return 1
+    printf '%s/%s' "$artifact_cache_root" "$path_component"
+}
+
+get_artifact_manifest_path() {
+    local artifact_dir
+
+    artifact_dir=$(get_artifact_dir "${1:-${current_build_id:-}}") || return 1
+    printf '%s/manifest.json' "$artifact_dir"
+}
+
+get_artifact_payload_path() {
+    local artifact_dir
+
+    artifact_dir=$(get_artifact_dir "${1:-${current_build_id:-}}") || return 1
+    printf '%s/payload.tar.zst' "$artifact_dir"
+}
+
+get_artifact_success_path() {
+    local artifact_dir
+
+    artifact_dir=$(get_artifact_dir "${1:-${current_build_id:-}}") || return 1
+    printf '%s/success' "$artifact_dir"
+}
+
+collect_script_hashes() {
+    local out="${1:-}"
+    local meson_template
+
+    [ -n "$out" ] || { error "collect_script_hashes: missing output path"; return 1; }
+    append_file_hash "${native_project_root}/builder.sh" "$out"
+    append_file_hash "${native_project_root}/setup2.sh" "$out"
+    append_file_hash "${native_project_root}/cleanup.sh" "$out"
+    append_file_hash "${native_project_root}/cmake/ohos.toolchain.xhw.cmake" "$out"
+    for meson_template in "${native_project_root}"/meson-scripts/*.meson.template; do
+        [ -f "$meson_template" ] && append_file_hash "$meson_template" "$out"
+    done
+}
+
+first_postinst_path_for_build() {
+    local build_file="${1:-}"
+    local build_dir postinst_name
+
+    build_dir=$(dirname "$(readlink -f "$build_file")")
+    for postinst_name in postinst POSTINST PostInst; do
+        if [ -f "${build_dir}/${postinst_name}" ]; then
+            printf '%s' "${build_dir}/${postinst_name}"
+            return 0
+        fi
+    done
+}
+
+write_artifact_manifest() {
+    local build_file="${1:-}"
+    local payload_path="${2:-}"
+    local payload_sha256="${3:-}"
+    local manifest_path="${4:-}"
+    local abs_build_file rel_build_file postinst_path postinst_sha256 source_archive_sha256
+    local patch_hashes script_hashes payload_size created_at
+
+    [ -n "$build_file" ] || { error "write_artifact_manifest: empty build file"; return 1; }
+    [ -f "$payload_path" ] || { error "write_artifact_manifest: payload not found: '$payload_path'"; return 1; }
+    [ -n "$payload_sha256" ] || { error "write_artifact_manifest: empty payload sha256"; return 1; }
+    [ -n "$manifest_path" ] || { error "write_artifact_manifest: empty manifest path"; return 1; }
+    [ -n "${current_build_id:-}" ] || { error "write_artifact_manifest: empty current build id"; return 1; }
+
+    abs_build_file=$(readlink -f "$build_file")
+    rel_build_file=$(relpath_from_project "$abs_build_file")
+    postinst_path=$(first_postinst_path_for_build "$abs_build_file" || true)
+    postinst_sha256=""
+    if [ -n "$postinst_path" ]; then
+        postinst_sha256="sha256:$(sha256_file "$postinst_path")"
+    fi
+    source_archive_sha256=$(source_archive_sha256_for_url "${pkg_source_url:-}")
+    payload_size=$(wc -c < "$payload_path" | awk '{print $1}')
+    created_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+    patch_hashes=$(mktemp)
+    script_hashes=$(mktemp)
+    : > "$patch_hashes"
+    : > "$script_hashes"
+    if ! collect_patch_hashes "$abs_build_file" "$patch_hashes"; then
+        rm -f "$patch_hashes" "$script_hashes"
+        return 1
+    fi
+    collect_script_hashes "$script_hashes"
+
+    {
+        printf '{\n'
+        printf '  "format": 1,\n'
+        printf '  "name": '; json_string "${pkg_name:-}"; printf ',\n'
+        printf '  "version": '; json_string "${pkg_version:-}"; printf ',\n'
+        printf '  "arch": '; json_string "${OHOS_CPU:-}"; printf ',\n'
+        printf '  "ohos_api": '; json_string "${OHOS_SDK_API_VERSION:-}"; printf ',\n'
+        printf '  "build_id": '; json_string "${current_build_id:-}"; printf ',\n'
+        printf '  "build_file": '; json_string "$rel_build_file"; printf ',\n'
+        printf '  "source_url": '; json_string "${pkg_source_url:-}"; printf ',\n'
+        printf '  "release_url": '; json_string "${pkg_release_url:-}"; printf ',\n'
+        printf '  "source_sha256": '; json_string "$source_archive_sha256"; printf ',\n'
+        printf '  "build_file_sha256": '; json_string "sha256:$(sha256_file "$abs_build_file")"; printf ',\n'
+        printf '  "postinst_sha256": '; json_string "$postinst_sha256"; printf ',\n'
+        printf '  "patch_hashes": '; json_file_hash_object "$patch_hashes"; printf ',\n'
+        printf '  "scripts": '; json_file_hash_object "$script_hashes"; printf ',\n'
+        printf '  "toolchain": {\n'
+        printf '    "ohos_sdk": '; json_string "${OHOS_SDK:-}"; printf ',\n'
+        printf '    "ohos_api": '; json_string "${OHOS_SDK_API_VERSION:-}"; printf ',\n'
+        printf '    "clang_version": '; json_string "$(tool_version_line "${OHOS_SDK:-}/native/llvm/bin/clang")"; printf ',\n'
+        printf '    "cmake_version": '; json_string "$(tool_version_line "${CMAKE_BIN:-cmake}")"; printf ',\n'
+        printf '    "meson_version": '; json_string "$(tool_version_line meson)"; printf ',\n'
+        printf '    "python_version": '; json_string "$(tool_version_line python3)"; printf ',\n'
+        printf '    "ninja_version": '; json_string "$(tool_version_line ninja)"; printf '\n'
+        printf '  },\n'
+        printf '  "environment": {\n'
+        printf '    "OHOS_CPU": '; json_string "${OHOS_CPU:-}"; printf ',\n'
+        printf '    "OHOS_ARCH": '; json_string "${OHOS_ARCH:-}"; printf ',\n'
+        printf '    "OHOS_LIBDIR": '; json_string "${OHOS_LIBDIR:-}"; printf ',\n'
+        printf '    "CC": '; json_string "${CC:-}"; printf ',\n'
+        printf '    "CXX": '; json_string "${CXX:-}"; printf ',\n'
+        printf '    "CFLAGS": '; json_string "${CFLAGS:-}"; printf ',\n'
+        printf '    "CXXFLAGS": '; json_string "${CXXFLAGS:-}"; printf ',\n'
+        printf '    "CPPFLAGS": '; json_string "${CPPFLAGS:-}"; printf ',\n'
+        printf '    "LDFLAGS": '; json_string "${LDFLAGS:-}"; printf ',\n'
+        printf '    "PKG_CONFIG_LIBDIR": '; json_string "${PKG_CONFIG_LIBDIR:-}"; printf '\n'
+        printf '  },\n'
+        printf '  "dependency_artifacts": {},\n'
+        printf '  "payload": "payload.tar.zst",\n'
+        printf '  "payload_sha256": '; json_string "sha256:${payload_sha256}"; printf ',\n'
+        printf '  "payload_size": %s,\n' "$payload_size"
+        printf '  "created_at": '; json_string "$created_at"; printf '\n'
+        printf '}\n'
+    } > "$manifest_path"
+
+    rm -f "$patch_hashes" "$script_hashes"
+}
+
+write_artifact_cache_unlocked() {
+    local build_file="${1:-}"
+    local payload_source_dir="${2:-}"
+    local build_id="${3:-${current_build_id:-}}"
+    local artifact_dir tmp_dir payload_path payload_sha256 manifest_path path_component
+
+    [ -d "$payload_source_dir" ] || { error "write_artifact_cache: payload source not found: '$payload_source_dir'"; return 1; }
+    if ! command -v zstd >/dev/null 2>&1; then
+        error "write_artifact_cache: zstd command is required for payload.tar.zst"
+        return 1
+    fi
+
+    path_component=$(artifact_path_component_for_build_id "$build_id") || return 1
+    artifact_dir=$(get_artifact_dir "$build_id") || return 1
+    mkdir -p "$(dirname "$artifact_dir")"
+    tmp_dir=$(mktemp -d "${artifact_dir}.tmp.XXXXXX") || return 1
+    payload_path="${tmp_dir}/payload.tar.zst"
+    manifest_path="${tmp_dir}/manifest.json"
+
+    if ! tar --zstd -cf "$payload_path" -C "$payload_source_dir" .; then
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+    payload_sha256=$(sha256_file "$payload_path")
+
+    if ! write_artifact_manifest "$build_file" "$payload_path" "$payload_sha256" "$manifest_path"; then
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    touch "${tmp_dir}/success"
+    rm -rf "$artifact_dir"
+    if ! mv "$tmp_dir" "$artifact_dir"; then
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+    info "cached artifact: ${path_component}"
+}
+
+write_artifact_cache() {
+    local build_file="${1:-}"
+    local payload_source_dir="${2:-}"
+    local build_id="${3:-${current_build_id:-}}"
+    local path_component
+
+    path_component=$(artifact_path_component_for_build_id "$build_id") || return 1
+    if declare -F with_ohloha_lock >/dev/null 2>&1; then
+        with_ohloha_lock "artifact-${path_component}" write_artifact_cache_unlocked "$build_file" "$payload_source_dir" "$build_id"
+    else
+        write_artifact_cache_unlocked "$build_file" "$payload_source_dir" "$build_id"
+    fi
 }
 
 write_build_fingerprint_input() {
@@ -1263,8 +1492,14 @@ build_package() {
     target_root_prefix_without_pkgname=""
     target_root_with_pkgname=""
     current_source_fresh=false
+    current_build_id=""
     current_work_root=$(compute_build_work_root "$build_file") || {
         error "compute_build_work_root for '$build_file' failed"
+        restore_xcompile_flags
+        clear_vars
+        return 1
+    }
+    current_build_id=$(build_id_from_work_root "$current_work_root") || {
         restore_xcompile_flags
         clear_vars
         return 1
@@ -1291,6 +1526,11 @@ build_package() {
     }
     if [ "$recomputed_work_root" != "$current_work_root" ]; then
         current_work_root="$recomputed_work_root"
+        current_build_id=$(build_id_from_work_root "$current_work_root") || {
+            restore_xcompile_flags
+            clear_vars
+            return 1
+        }
         mkdir -p "$current_work_root"
         target_root_prefix_without_pkgname="${current_work_root}/install/dist.${OHOS_CPU}"
         target_root_with_pkgname="$(get_pkg_install_dir "$pkg_name")"
@@ -1335,6 +1575,13 @@ build_package() {
 
     publish_pkg_to_legacy_dst "$pkg_name" "$target_root_with_pkgname" || {
         error "publish_pkg_to_legacy_dst for '$build_file' failed"
+        restore_xcompile_flags
+        clear_vars
+        return 1
+    }
+
+    write_artifact_cache "$build_file" "$(get_pkg_legacy_dst_dir "$pkg_name")" "$current_build_id" || {
+        error "write_artifact_cache for '$build_file' failed"
         restore_xcompile_flags
         clear_vars
         return 1

@@ -123,9 +123,9 @@
 
 任务：
 
-- [ ] 定义 `build-id` 计算规则。
-- [ ] artifact manifest 记录 `name`、`version`、`arch`、`ohos_api`、`build_id`、`source_sha256`、`build_file_sha256`、`patch_hashes`、`dependency_artifacts`、`toolchain_identity`。
-- [ ] 构建成功后写入 `.ohloha/artifacts/<build-id>/manifest.json`、`payload.tar.zst`、`success`。
+- [x] 定义 `build-id` 计算规则，并让 workdir、`--cache-key` 和 artifact 共享同一 fingerprint 输入。
+- [x] artifact manifest 初版记录 `name`、`version`、`arch`、`ohos_api`、`build_id`、`source_sha256`、`build_file_sha256`、`patch_hashes`、`dependency_artifacts` 占位和 toolchain/environment 信息。
+- [x] 构建成功后写入 `.ohloha/artifacts/<build-id>/manifest.json`、`payload.tar.zst`、`success`。
 - [ ] cache hit 时恢复 artifact 到目标 `dist`，不执行 download、patch、configure、make、POSTINST。
 - [ ] cache hit 前校验 manifest 和 payload 完整性。
 - [ ] 构建失败不写 `success`，不发布半成品 dist。

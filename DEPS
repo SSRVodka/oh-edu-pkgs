@@ -3,7 +3,7 @@ apt install -y lsb-release wget software-properties-common gnupg curl
 apt install -y build-essential file patchelf bison flex nasm texinfo perl automake autoconf autopoint libtool libtool-bin m4 po4a
 # python deps
 # Change lzma-dev to liblzma-dev, libncurses5-dev to libncurses-dev, libreadline6-dev to libreadline-dev in ubuntu >= 26.04
-apt install -y gdb lcov pkg-config libbz2-dev libffi-dev liblzma-dev libncurses5-dev libreadline6-dev libsqlite3-dev libssl-dev lzma lzma-dev uuid-dev zlib1g-dev libmpdec-dev libzstd-dev inetutils-inetd
+apt install -y gdb lcov pkg-config libbz2-dev libffi-dev liblzma-dev libncurses5-dev libreadline6-dev libsqlite3-dev libssl-dev lzma lzma-dev uuid-dev zlib1g-dev libmpdec-dev libzstd-dev zstd inetutils-inetd
 # zstd deps
 apt install -y ninja-build
 # pypkgs deps
