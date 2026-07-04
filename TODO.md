@@ -230,7 +230,8 @@ boost/
 
 任务：
 
-- [ ] `pkgs-deploy-all.sh` 支持从 `PKG_INDEX.json` 和 artifact manifest 部署，不再读取 `VERSION` / `VERSIONS`。
+- [x] `pkgs-deploy-all.sh` 支持从 `PKG_INDEX.json` 部署，不再读取 `VERSION` / `VERSIONS`。
+- [ ] `pkgs-deploy-all.sh` 进一步改为优先读取 artifact manifest 中的 resolved dependency list。
 - [ ] `ohla-tool` 打包时使用 resolved dependency list，而不是仅 `build_deps` 字符串。
 - [ ] deploy 文件名包含版本、架构、API，保持与当前 `.pkg/.json` 规则兼容。
 - [ ] 安装时可解析同名多版本或至少拒绝冲突。
