@@ -33,6 +33,7 @@ pkg_support_archs="x86_64,aarch64,arm"
 pkg_build_type="autotools"
 # [OPTIONAL]
 pkg_build_parallism=""
+pkg_patch_files="patches/${pkg_version}/0001-disable-linux-thread-affinity.patch,patches/${pkg_version}/0002-remove-cblas-affinity-prototypes.patch"
 
 ####### build type related (all OPTIONAL) #######
 
@@ -114,8 +115,11 @@ prebuilt_patch_hook() {
 prebuilt_patch_once_hook() {
 	pushd ${current_source_root}
 	echo "#include <stdlib.h>\n$(cat utest/test_extensions/common.c)" > utest/test_extensions/common.c
-	patch -N driver/others/blas_server.c < ${native_project_root}/patches/oh-openblas-blasserver.patch >&2
-	patch -N cblas.h < ${native_project_root}/patches/oh-openblas-cblas.patch >&2
+	local blas_server_patch cblas_patch
+	blas_server_patch=$(get_pkg_patch_files "patches/${pkg_version}/0001-disable-linux-thread-affinity.patch")
+	cblas_patch=$(get_pkg_patch_files "patches/${pkg_version}/0002-remove-cblas-affinity-prototypes.patch")
+	patch -N driver/others/blas_server.c < "$blas_server_patch" >&2
+	patch -N cblas.h < "$cblas_patch" >&2
 	popd
 }
 

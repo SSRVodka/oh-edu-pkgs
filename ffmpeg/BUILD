@@ -33,6 +33,7 @@ pkg_support_archs="x86_64,aarch64,arm"
 pkg_build_type="autotools"
 # [OPTIONAL]
 pkg_build_parallism=""
+pkg_patch_files="patches/${pkg_version}/0001-remove-non-clang-compiler-probes.patch"
 
 ####### build type related (all OPTIONAL) #######
 
@@ -117,7 +118,9 @@ prebuilt_patch_hook() {
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
 	pushd ${current_source_root}
-	patch -N configure < ${native_project_root}/patches/oh-ffmpeg.patch >&2
+	local configure_patch
+	configure_patch=$(get_pkg_patch_files)
+	patch -N configure < "$configure_patch" >&2
 	popd
 }
 
