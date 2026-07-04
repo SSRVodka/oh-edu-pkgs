@@ -128,7 +128,7 @@
 - [x] 构建成功后写入 `.ohloha/artifacts/<build-id>/manifest.json`、`payload.tar.zst`、`success`。
 - [x] cache hit 时恢复 artifact 到目标 `dist`，不执行 download、patch、configure、make、POSTINST。
 - [x] cache hit 前校验 manifest 和 payload 完整性。
-- [ ] 构建失败不写 `success`，不发布半成品 dist。
+- [x] 构建失败不写 `success`，artifact 写入成功后才发布 legacy dist。
 - [ ] 新增调试选项；已支持 `--no-cache`、`--force-rebuild`，待补 `--keep-failed-work`。
 - [ ] 缓存 key 包含已解析依赖的 artifact id，而不是仅依赖名。
 
