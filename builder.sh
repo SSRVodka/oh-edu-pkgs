@@ -555,10 +555,17 @@ print_package_cache_key() {
     setup || { error "setup() failed"; clear_vars; return 1; }
     validate_config || { clear_vars; return 1; }
 
-    local abs_build_file rel_build_file build_dir
+    local abs_build_file rel_build_file build_dir source_archive source_archive_sha256
     abs_build_file=$(readlink -f "$build_file")
     rel_build_file=$(relpath_from_project "$abs_build_file")
     build_dir=$(dirname "$abs_build_file")
+    source_archive_sha256=""
+    if [ -n "${pkg_source_url:-}" ]; then
+        source_archive=$(source_archive_path_for_url "$pkg_source_url")
+        if [ -f "$source_archive" ]; then
+            source_archive_sha256="sha256:$(sha256_file "$source_archive")"
+        fi
+    fi
 
     local file_hashes input_blob
     file_hashes=$(mktemp)
@@ -596,6 +603,7 @@ print_package_cache_key() {
         printf 'ohos_libdir=%s\n' "${OHOS_LIBDIR:-}"
         printf 'target_root=%s\n' "${TARGET_ROOT:-}"
         printf 'host_sysroot=%s\n' "${HOST_SYSROOT:-}"
+        printf 'source_archive_sha256=%s\n' "$source_archive_sha256"
         printf 'clang=%s\n' "$(tool_version_line "${OHOS_SDK:-}/native/llvm/bin/clang")"
         printf 'cmake=%s\n' "$(tool_version_line cmake)"
         printf 'meson=%s\n' "$(tool_version_line meson)"
@@ -620,6 +628,7 @@ print_package_cache_key() {
     printf '  "build_file": '; json_string "$rel_build_file"; printf ',\n'
     printf '  "arch": '; json_string "${OHOS_CPU:-}"; printf ',\n'
     printf '  "ohos_api": '; json_string "${OHOS_SDK_API_VERSION:-}"; printf ',\n'
+    printf '  "source_archive_sha256": '; json_string "$source_archive_sha256"; printf ',\n'
     printf '  "deps": '; json_csv_array "${pkg_deps:-}"; printf ',\n'
     printf '  "build_deps": '; json_csv_array "${pkg_build_deps:-}"; printf ',\n'
     printf '  "patch_files": '; json_csv_array "${pkg_patch_files:-}"; printf ',\n'
