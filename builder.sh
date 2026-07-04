@@ -136,6 +136,15 @@ publish_pkg_to_legacy_dst() {
     cp -a "$_pkg_src" "$_tmp_dst"
     rm -rf "$_pkg_dst"
     mv "$_tmp_dst" "$_pkg_dst"
+
+    if declare -F patch_libdir_origin >/dev/null 2>&1; then
+        if [ -d "${_pkg_dst}/${OHOS_LIBDIR}" ]; then
+            patch_libdir_origin "$_pkg_name" "" "$_pkg_dst"
+        fi
+        if [ -d "${_pkg_dst}/share" ]; then
+            patch_libdir_origin "$_pkg_name" "" "$_pkg_dst" "${_pkg_dst}/share"
+        fi
+    fi
 }
 
 # Variable definitions
@@ -391,6 +400,17 @@ source_archive_path_for_url() {
     printf '%s/sha256-%s.archive' "$download_cache_root" "$source_digest"
 }
 
+source_archive_sha256_for_url() {
+    local url="${1:-}"
+    local source_archive
+
+    [ -n "$url" ] || return 0
+    source_archive=$(source_archive_path_for_url "$url")
+    if [ -f "$source_archive" ]; then
+        printf 'sha256:%s' "$(sha256_file "$source_archive")"
+    fi
+}
+
 compute_patched_source_snapshot_dir() {
     local build_file="${1:-}"
     local id_input patch_hashes source_archive source_identity
@@ -506,49 +526,82 @@ prepare_work_source_root() {
 
 compute_build_work_root() {
     local build_file="${1:-}"
-    local id_input patch_hashes source_archive source_archive_sha256
+    local id_input file_hashes
     id_input=$(mktemp)
-    patch_hashes=$(mktemp)
+    file_hashes=$(mktemp)
     cleanup_build_work_tmp() {
-        rm -f "$id_input" "$patch_hashes"
+        rm -f "$id_input" "$file_hashes"
     }
 
-    source_archive_sha256=""
-    if [ -n "${pkg_source_url:-}" ]; then
-        source_archive=$(source_archive_path_for_url "$pkg_source_url")
-        if [ -f "$source_archive" ]; then
-            source_archive_sha256="sha256:$(sha256_file "$source_archive")"
-        fi
-    fi
-
-    append_file_hash "$build_file" "$patch_hashes"
-    collect_patch_hashes "$build_file" "$patch_hashes" || { cleanup_build_work_tmp; return 1; }
-
-    {
-        printf 'format=1\n'
-        printf 'pkg_name=%s\n' "${pkg_name:-}"
-        printf 'pkg_version=%s\n' "${pkg_version:-}"
-        printf 'pkg_build_type=%s\n' "${pkg_build_type:-}"
-        printf 'ohos_cpu=%s\n' "${OHOS_CPU:-}"
-        printf 'ohos_arch=%s\n' "${OHOS_ARCH:-}"
-        printf 'ohos_api=%s\n' "${OHOS_SDK_API_VERSION:-}"
-        printf 'source_archive_sha256=%s\n' "$source_archive_sha256"
-        printf 'cflags=%s\n' "${CFLAGS:-}"
-        printf 'cxxflags=%s\n' "${CXXFLAGS:-}"
-        printf 'cppflags=%s\n' "${CPPFLAGS:-}"
-        printf 'ldflags=%s\n' "${LDFLAGS:-}"
-        printf 'pkg_config_libdir=%s\n' "${PKG_CONFIG_LIBDIR:-}"
-        local var
-        for var in "${PKG_VARS[@]}" "${AUTOTOOLS_VARS[@]}" "${CMAKE_VARS[@]}" "${MESON_VARS[@]}"; do
-            printf 'var:%s=%s\n' "$var" "$(normalize_build_input_value "${!var:-}")"
-        done
-        sort -u "$patch_hashes" | sed 's/^/file:/'
-    } > "$id_input"
+    write_build_fingerprint_input "$build_file" "$id_input" "$file_hashes" || { cleanup_build_work_tmp; return 1; }
 
     local digest
     digest=$(sha256_file "$id_input")
     printf '%s/work/sha256-%s' "$ohloha_root" "$digest"
     cleanup_build_work_tmp
+}
+
+write_build_fingerprint_input() {
+    local build_file="${1:-}"
+    local input_out="${2:-}"
+    local file_hashes="${3:-}"
+    local abs_build_file rel_build_file build_dir postinst_name meson_template
+
+    [ -n "$input_out" ] || { error "write_build_fingerprint_input: missing input output path"; return 1; }
+    [ -n "$file_hashes" ] || { error "write_build_fingerprint_input: missing file hashes path"; return 1; }
+
+    abs_build_file=$(readlink -f "$build_file")
+    rel_build_file=$(relpath_from_project "$abs_build_file")
+    build_dir=$(dirname "$abs_build_file")
+
+    : > "$file_hashes"
+    append_file_hash "$abs_build_file" "$file_hashes"
+    for postinst_name in postinst POSTINST PostInst; do
+        append_file_hash "${build_dir}/${postinst_name}" "$file_hashes"
+    done
+    append_file_hash "${native_project_root}/builder.sh" "$file_hashes"
+    append_file_hash "${native_project_root}/setup2.sh" "$file_hashes"
+    append_file_hash "${native_project_root}/cleanup.sh" "$file_hashes"
+    append_file_hash "${native_project_root}/cmake/ohos.toolchain.xhw.cmake" "$file_hashes"
+    for meson_template in "${native_project_root}"/meson-scripts/*.meson.template; do
+        [ -f "$meson_template" ] && append_file_hash "$meson_template" "$file_hashes"
+    done
+    collect_patch_hashes "$abs_build_file" "$file_hashes" || return 1
+
+    {
+        printf 'format=1\n'
+        printf 'name=%s\n' "${pkg_name:-}"
+        printf 'version=%s\n' "${pkg_version:-}"
+        printf 'build_file=%s\n' "$rel_build_file"
+        printf 'source_url=%s\n' "${pkg_source_url:-}"
+        printf 'release_url=%s\n' "${pkg_release_url:-}"
+        printf 'source_archive_sha256=%s\n' "$(source_archive_sha256_for_url "${pkg_source_url:-}")"
+        printf 'ohos_cpu=%s\n' "${OHOS_CPU:-}"
+        printf 'ohos_arch=%s\n' "${OHOS_ARCH:-}"
+        printf 'ohos_sdk=%s\n' "${OHOS_SDK:-}"
+        printf 'ohos_api=%s\n' "${OHOS_SDK_API_VERSION:-}"
+        printf 'ohos_libdir=%s\n' "${OHOS_LIBDIR:-}"
+        printf 'target_root=%s\n' "${TARGET_ROOT:-}"
+        printf 'host_sysroot=%s\n' "${HOST_SYSROOT:-}"
+        printf 'cc=%s\n' "${CC:-}"
+        printf 'cxx=%s\n' "${CXX:-}"
+        printf 'cflags=%s\n' "${CFLAGS:-}"
+        printf 'cxxflags=%s\n' "${CXXFLAGS:-}"
+        printf 'cppflags=%s\n' "${CPPFLAGS:-}"
+        printf 'ldflags=%s\n' "${LDFLAGS:-}"
+        printf 'pkg_config_path=%s\n' "${PKG_CONFIG_PATH:-}"
+        printf 'pkg_config_libdir=%s\n' "${PKG_CONFIG_LIBDIR:-}"
+        printf 'clang=%s\n' "$(tool_version_line "${OHOS_SDK:-}/native/llvm/bin/clang")"
+        printf 'cmake=%s\n' "$(tool_version_line "${CMAKE_BIN:-cmake}")"
+        printf 'meson=%s\n' "$(tool_version_line meson)"
+        printf 'ninja=%s\n' "$(tool_version_line ninja)"
+        printf 'python=%s\n' "$(tool_version_line python3)"
+        local var
+        for var in "${PKG_VARS[@]}" "${AUTOTOOLS_VARS[@]}" "${CMAKE_VARS[@]}" "${MESON_VARS[@]}"; do
+            printf 'var:%s=%s\n' "$var" "$(normalize_build_input_value "${!var:-}")"
+        done
+        sort -u "$file_hashes" | sed 's/^/file:/'
+    } > "$input_out"
 }
 
 prepare_meson_cross_file_for_build() {
@@ -719,22 +772,20 @@ print_package_cache_key() {
 
     clear_vars
     setup_metadata_defaults || { clear_vars; return 1; }
-    load_sdk_api_version_for_metadata
+    if [ -n "${OHOS_SDK:-}" ] && [ -f "${OHOS_SDK}/toolchains/oh-uni-package.json" ]; then
+        # Keep stdout clean for JSON output while loading the real build environment.
+        . "${native_project_root}/setup2.sh" >/dev/null
+    else
+        load_sdk_api_version_for_metadata
+    fi
     source "$build_file"
     setup || { error "setup() failed"; clear_vars; return 1; }
     validate_config || { clear_vars; return 1; }
 
-    local abs_build_file rel_build_file build_dir source_archive source_archive_sha256
+    local abs_build_file rel_build_file source_archive_sha256
     abs_build_file=$(readlink -f "$build_file")
     rel_build_file=$(relpath_from_project "$abs_build_file")
-    build_dir=$(dirname "$abs_build_file")
-    source_archive_sha256=""
-    if [ -n "${pkg_source_url:-}" ]; then
-        source_archive=$(source_archive_path_for_url "$pkg_source_url")
-        if [ -f "$source_archive" ]; then
-            source_archive_sha256="sha256:$(sha256_file "$source_archive")"
-        fi
-    fi
+    source_archive_sha256=$(source_archive_sha256_for_url "${pkg_source_url:-}")
 
     local file_hashes input_blob
     file_hashes=$(mktemp)
@@ -743,47 +794,11 @@ print_package_cache_key() {
         rm -f "$file_hashes" "$input_blob"
     }
 
-    append_file_hash "$abs_build_file" "$file_hashes"
-    for postinst_name in postinst POSTINST PostInst; do
-        append_file_hash "${build_dir}/${postinst_name}" "$file_hashes"
-    done
-    append_file_hash "${native_project_root}/builder.sh" "$file_hashes"
-    append_file_hash "${native_project_root}/setup2.sh" "$file_hashes"
-    append_file_hash "${native_project_root}/cleanup.sh" "$file_hashes"
-    append_file_hash "${native_project_root}/cmake/ohos.toolchain.xhw.cmake" "$file_hashes"
-    for meson_template in "${native_project_root}"/meson-scripts/*.meson.template; do
-        [ -f "$meson_template" ] && append_file_hash "$meson_template" "$file_hashes"
-    done
-    if ! collect_patch_hashes "$abs_build_file" "$file_hashes"; then
+    if ! write_build_fingerprint_input "$abs_build_file" "$input_blob" "$file_hashes"; then
         cleanup_cache_key_tmp
         clear_vars
         return 1
     fi
-
-    {
-        printf 'format=1\n'
-        printf 'name=%s\n' "${pkg_name:-}"
-        printf 'version=%s\n' "${pkg_version:-}"
-        printf 'build_file=%s\n' "$rel_build_file"
-        printf 'ohos_cpu=%s\n' "${OHOS_CPU:-}"
-        printf 'ohos_arch=%s\n' "${OHOS_ARCH:-}"
-        printf 'ohos_sdk=%s\n' "${OHOS_SDK:-}"
-        printf 'ohos_api=%s\n' "${OHOS_SDK_API_VERSION:-}"
-        printf 'ohos_libdir=%s\n' "${OHOS_LIBDIR:-}"
-        printf 'target_root=%s\n' "${TARGET_ROOT:-}"
-        printf 'host_sysroot=%s\n' "${HOST_SYSROOT:-}"
-        printf 'source_archive_sha256=%s\n' "$source_archive_sha256"
-        printf 'clang=%s\n' "$(tool_version_line "${OHOS_SDK:-}/native/llvm/bin/clang")"
-        printf 'cmake=%s\n' "$(tool_version_line cmake)"
-        printf 'meson=%s\n' "$(tool_version_line meson)"
-        printf 'ninja=%s\n' "$(tool_version_line ninja)"
-        printf 'python=%s\n' "$(tool_version_line python3)"
-        local var
-        for var in "${PKG_VARS[@]}" "${AUTOTOOLS_VARS[@]}" "${CMAKE_VARS[@]}" "${MESON_VARS[@]}"; do
-            printf 'var:%s=%s\n' "$var" "$(normalize_build_input_value "${!var:-}")"
-        done
-        sort -u "$file_hashes" | sed 's/^/file:/'
-    } > "$input_blob"
 
     local digest
     digest=$(sha256_file "$input_blob")
