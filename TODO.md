@@ -109,7 +109,7 @@
 - [ ] `target_root_prefix_without_pkgname` 改为 workdir 内的临时安装前缀，不能再共享 `dist.<cpu>`。
 - [ ] 成功后从 workdir 原子发布到 `dist.<cpu>.<pkg>` 或 `dist.<cpu>.<pkg>-<version>`。
 - [x] 默认 CMake/Meson build dir 改为绝对 workdir 路径，避免固定污染源码树中的 `ohos-build`；自定义包手写 build dir 后续逐步迁移。
-- [ ] Meson cross file 从模板生成到 workdir，不再并发写 `meson-scripts/*.meson`。
+- [ ] Meson cross file 从模板生成到 workdir，不再并发写 `meson-scripts/*.meson`；默认 Meson 构建已改为使用 workdir 内 cross file 副本，`setup2.sh` 模板生成仍待迁移。
 
 验收：
 

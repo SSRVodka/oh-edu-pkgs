@@ -451,6 +451,27 @@ compute_build_work_root() {
     cleanup_build_work_tmp
 }
 
+prepare_meson_cross_file_for_build() {
+    local cross_file="${1:-${MESON_CROSS_FILE_BASE:-}}"
+    if [ -z "$cross_file" ] || [ -z "${current_work_root:-}" ]; then
+        printf '%s' "$cross_file"
+        return 0
+    fi
+    if [ ! -f "$cross_file" ]; then
+        printf '%s' "$cross_file"
+        return 0
+    fi
+
+    local meson_dir dst
+    meson_dir="${current_work_root}/meson"
+    mkdir -p "$meson_dir"
+    dst="${meson_dir}/$(basename "$cross_file")"
+    if [ "$(readlink -f "$cross_file")" != "$(readlink -m "$dst")" ]; then
+        cp "$cross_file" "$dst"
+    fi
+    printf '%s' "$dst"
+}
+
 get_pkg_patch_files() {
     local build_dir="${current:-${native_project_root}}"
     local patch_refs=("$@")
@@ -1016,10 +1037,12 @@ build() {
     local deps_sep_space=$(get_pkg_names_from_deps "$pkg_build_deps")
     local cmake_build_dir="ohos-build"
     local meson_build_dir="ohos-build"
+    local meson_cross_file="${pkg_build_meson_cross_file:-}"
     if [ -n "${current_work_root:-}" ]; then
         cmake_build_dir="${current_work_root}/build/cmake"
         meson_build_dir="${current_work_root}/build/meson"
     fi
+    meson_cross_file=$(prepare_meson_cross_file_for_build "$meson_cross_file")
 
     info "start building '$pkg_name' with deps: '$deps_sep_space'"
 
@@ -1064,7 +1087,7 @@ build() {
             build_mesonproj_with_deps \
                 "$target" \
                 "$deps_sep_space" \
-                "$pkg_build_meson_cross_file" \
+                "$meson_cross_file" \
                 "$pkg_build_meson_extra_meson_flags" \
                 "$pkg_build_parallism" \
                 "$pkg_build_meson_extra_cflags" \
