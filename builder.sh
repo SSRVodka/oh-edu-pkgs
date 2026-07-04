@@ -19,6 +19,7 @@ current_source_root=""
 current_build_root=""
 target_root_with_pkgname=""
 target_root_prefix_without_pkgname=""
+current_source_fresh=false
 
 native_project_root=$(dirname "$(readlink -f "$0")")
 ohloha_root=${native_project_root}/.ohloha
@@ -317,6 +318,89 @@ collect_patch_hashes() {
             append_file_hash "$patch_file" "$out"
         fi
     done < <(detect_referenced_patch_files "$build_file")
+}
+
+source_archive_path_for_url() {
+    local url="${1:-}"
+    local source_digest
+    source_digest=$(printf '%s' "$url" | sha256sum | awk '{print $1}')
+    printf '%s/sha256-%s.archive' "$download_cache_root" "$source_digest"
+}
+
+publish_patched_source_snapshot() {
+    local build_file="${1:-}"
+    local source_root="${2:-}"
+    [ -d "$source_root" ] || return 0
+
+    local id_input patch_hashes source_archive source_identity
+    id_input=$(mktemp)
+    patch_hashes=$(mktemp)
+    cleanup_patched_snapshot_tmp() {
+        rm -f "$id_input" "$patch_hashes"
+    }
+
+    source_identity="source-url:${current_source_url:-}"
+    if [ -n "${current_source_url:-}" ]; then
+        source_archive=$(source_archive_path_for_url "$current_source_url")
+        if [ -f "$source_archive" ]; then
+            source_identity="source-archive:sha256:$(sha256_file "$source_archive")"
+        fi
+    fi
+
+    append_file_hash "$build_file" "$patch_hashes"
+    local build_dir postinst_name
+    build_dir=$(dirname "$(readlink -f "$build_file")")
+    for postinst_name in postinst POSTINST PostInst; do
+        append_file_hash "${build_dir}/${postinst_name}" "$patch_hashes"
+    done
+    collect_patch_hashes "$build_file" "$patch_hashes" || { cleanup_patched_snapshot_tmp; return 1; }
+
+    {
+        printf 'format=1\n'
+        printf 'pkg_name=%s\n' "${pkg_name:-}"
+        printf 'pkg_version=%s\n' "${pkg_version:-}"
+        printf 'source_identity=%s\n' "$source_identity"
+        printf 'ohos_cpu=%s\n' "${OHOS_CPU:-}"
+        printf 'ohos_arch=%s\n' "${OHOS_ARCH:-}"
+        sort -u "$patch_hashes"
+    } > "$id_input"
+
+    local patched_digest patched_dir
+    patched_digest=$(sha256_file "$id_input")
+    patched_dir="${source_cache_root}/sha256-${patched_digest}/patched"
+
+    publish_patched_source_snapshot_unlocked() {
+        local _source_root="${1:?source root must be set}"
+        local _patched_dir="${2:?patched dir must be set}"
+        [ -d "$_patched_dir" ] && return 0
+
+        mkdir -p "$(dirname "$_patched_dir")"
+        local _tmp_patched
+        _tmp_patched=$(mktemp -d "${_patched_dir}.tmp.XXXXXX") || return 1
+        rm -rf "$_tmp_patched"
+        if ! cp -a "$_source_root" "$_tmp_patched"; then
+            rm -rf "$_tmp_patched"
+            return 1
+        fi
+        if ! mv "$_tmp_patched" "$_patched_dir"; then
+            rm -rf "$_tmp_patched"
+            return 1
+        fi
+    }
+
+    if declare -F with_ohloha_lock >/dev/null 2>&1; then
+        if ! with_ohloha_lock "patched-source-sha256-${patched_digest}" publish_patched_source_snapshot_unlocked "$source_root" "$patched_dir"; then
+            cleanup_patched_snapshot_tmp
+            return 1
+        fi
+    else
+        if ! publish_patched_source_snapshot_unlocked "$source_root" "$patched_dir"; then
+            cleanup_patched_snapshot_tmp
+            return 1
+        fi
+    fi
+
+    cleanup_patched_snapshot_tmp
 }
 
 get_pkg_patch_files() {
@@ -839,12 +923,14 @@ download() {
     _custom_download_source_continue=true
     custom_download_source || { warn "custom_download_source process for '$current_source_root' failed"; return 1; }
     if [ "x$_custom_download_source_continue" != "xtrue" ]; then
+        current_source_fresh=true
         return 0
     fi
     
     while [ $attempt -le $max_retries ]; do
         if wget_source "${current_source_url}" "${current_source_root}"; then
             # source downloaded to ${current_source_root}
+            current_source_fresh=true
             return 0
         fi
         
@@ -970,6 +1056,7 @@ build_package() {
     current_build_root=""
     target_root_prefix_without_pkgname="${TARGET_ROOT}"
     target_root_with_pkgname="$(get_pkg_dst_dir $pkg_name)"
+    current_source_fresh=false
 
     # download if ${current_source_root} doesn't exist or flushed using optional pkg_force_clean_build
     if [ -n "${pkg_force_clean_build:-}" ]; then
@@ -985,6 +1072,14 @@ build_package() {
         touch "${current_source_root}/PATCHED_BY_OHLOHA"
     fi
     prebuilt_patch_hook || { error "prebuilt_patch_hook for '$build_file' failed"; restore_xcompile_flags; clear_vars; return 1; }
+    if [ "x${current_source_fresh:-false}" = "xtrue" ]; then
+        publish_patched_source_snapshot "$build_file" "$current_source_root" || {
+            error "publish_patched_source_snapshot for '$build_file' failed"
+            restore_xcompile_flags
+            clear_vars
+            return 1
+        }
+    fi
     build "$build_file" || { error "Build $build_file failed"; restore_xcompile_flags; clear_vars; return 1; }
     postbuilt_hook || { error "postbuilt_hook for '$build_file' failed"; restore_xcompile_flags; clear_vars; return 1; }
 
