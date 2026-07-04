@@ -23,13 +23,14 @@ target_root_prefix_without_pkgname=""
 native_project_root=$(dirname "$(readlink -f "$0")")
 ohloha_root=${native_project_root}/.ohloha
 download_cache_root=${ohloha_root}/downloads
+source_cache_root=${ohloha_root}/sources
 native_cache_root=${ohloha_root}/native
 native_sources_root=${native_cache_root}/sources
 # ${native_dst_root}/bin will be added to PATH and ${native_dst_root}/lib
 # will be added to LD_LIBRARY_PATH when executing build_package
 # TODO: move host-python to here
 native_dst_root=${native_cache_root}/dst
-mkdir -p "${download_cache_root}" "${native_sources_root}" "${native_dst_root}"
+mkdir -p "${download_cache_root}" "${source_cache_root}" "${native_sources_root}" "${native_dst_root}"
 
 
 # Validation rules
@@ -659,13 +660,6 @@ wget_source() {
     source_digest=$(printf '%s' "$url" | sha256sum | awk '{print $1}')
     archive_path="${download_cache_root}/sha256-${source_digest}.archive"
 
-    tmpd=$(mktemp -d) || { error "wget_source mktemp -d failed"; return 1; }
-
-    # Ensure cleanup on each failure/return without changing traps
-    _cleanup() {
-        rm -rf -- "$tmpd"
-    }
-
     download_source_archive() {
         local _url="${1:?download url must be set}"
         local _archive_path="${2:?archive path must be set}"
@@ -681,80 +675,117 @@ wget_source() {
         mv "$_tmp_archive" "$_archive_path"
     }
 
+    extract_clean_source_snapshot() {
+        local _archive_path="${1:?archive path must be set}"
+        local _clean_dir="${2:?clean source dir must be set}"
+        [ -d "$_clean_dir" ] && return 0
+
+        local _tmpd _tmp_clean
+        _tmpd=$(mktemp -d) || return 1
+        mkdir -p "$(dirname "$_clean_dir")"
+        _tmp_clean=$(mktemp -d "${_clean_dir}.tmp.XXXXXX") || { rm -rf "$_tmpd"; return 1; }
+
+        _cleanup_extract() {
+            rm -rf -- "$_tmpd" "$_tmp_clean"
+        }
+
+        local _mime
+        _mime=$(file -b --mime-type "$_archive_path" 2>/dev/null || echo "")
+
+        case "$_mime" in
+            application/zip)
+                if ! unzip -q "$_archive_path" -d "$_tmpd"; then error "wget_source unzip failed"; _cleanup_extract; return 1; fi
+                ;;
+            application/x-xz|application/x-7z-compressed)
+                if ! tar -xJf "$_archive_path" -C "$_tmpd"; then error "wget_source tar -J failed"; _cleanup_extract; return 1; fi
+                ;;
+            application/gzip|application/x-gzip)
+                if ! tar -xzf "$_archive_path" -C "$_tmpd"; then error "wget_source tar -z failed"; _cleanup_extract; return 1; fi
+                ;;
+            application/x-tar)
+                if ! tar -xf "$_archive_path" -C "$_tmpd"; then error "wget_source tar failed"; _cleanup_extract; return 1; fi
+                ;;
+            *)
+                # fallback: try tar then unzip
+                if tar -tf "$_archive_path" >/dev/null 2>&1; then
+                    if ! tar -xf "$_archive_path" -C "$_tmpd"; then error "wget_source tar fallback failed"; _cleanup_extract; return 1; fi
+                elif unzip -t "$_archive_path" >/dev/null 2>&1; then
+                    if ! unzip -q "$_archive_path" -d "$_tmpd"; then error "wget_source unzip fallback failed"; _cleanup_extract; return 1; fi
+                else
+                    error "wget_source unknown or unsupported archive format: '$_mime'"
+                    _cleanup_extract
+                    return 1
+                fi
+                ;;
+        esac
+
+        # list top-level entries (one-per-line). Note: this will break only for entries with embedded newlines.
+        local _top_entries _count _topdir
+        _top_entries=$(find "$_tmpd" -mindepth 1 -maxdepth 1 -print)
+        _count=$(printf '%s\n' "$_top_entries" | sed -n '$=')
+
+        if [ "$_count" -ne 1 ]; then
+            error "wget_source archive must contain exactly one top-level entry (found $_count)"
+            _cleanup_extract
+            return 1
+        fi
+
+        _topdir=$(printf '%s\n' "$_top_entries" | sed -n '1p')
+
+        if [ ! -d "$_topdir" ]; then
+            error "wget_source top-level entry is not a directory"
+            _cleanup_extract
+            return 1
+        fi
+
+        rm -rf "$_tmp_clean"
+        if ! mv -- "$_topdir" "$_tmp_clean"; then
+            error "wget_source clean snapshot move failed"
+            _cleanup_extract
+            return 1
+        fi
+        if ! mv "$_tmp_clean" "$_clean_dir"; then
+            error "wget_source clean snapshot publish failed"
+            _cleanup_extract
+            return 1
+        fi
+        _cleanup_extract
+    }
+
     # download archive once, then extract from the local cache
     if declare -F with_ohloha_lock >/dev/null 2>&1; then
         if ! with_ohloha_lock "download-${source_digest}" download_source_archive "$url" "$archive_path"; then
             error "wget_source download failed"
-            _cleanup
             return 1
         fi
     elif ! download_source_archive "$url" "$archive_path"; then
         error "wget_source download failed"
-        _cleanup
         return 1
     fi
 
-    # detect mime type (may be empty if file(1) not available; fallbacks below)
-    mime=$(file -b --mime-type "$archive_path" 2>/dev/null || echo "")
+    local archive_digest clean_dir
+    archive_digest=$(sha256_file "$archive_path")
+    clean_dir="${source_cache_root}/sha256-${archive_digest}/clean"
 
-    case "$mime" in
-        application/zip)
-            if ! unzip -q "$archive_path" -d "$tmpd"; then error "wget_source unzip failed"; _cleanup; return 1; fi
-            ;;
-        application/x-xz|application/x-7z-compressed)
-            if ! tar -xJf "$archive_path" -C "$tmpd"; then error "wget_source tar -J failed"; _cleanup; return 1; fi
-            ;;
-        application/gzip|application/x-gzip)
-            if ! tar -xzf "$archive_path" -C "$tmpd"; then error "wget_source tar -z failed"; _cleanup; return 1; fi
-            ;;
-        application/x-tar)
-            if ! tar -xf "$archive_path" -C "$tmpd"; then error "wget_source tar failed"; _cleanup; return 1; fi
-            ;;
-        *)
-            # fallback: try tar then unzip
-            if tar -tf "$archive_path" >/dev/null 2>&1; then
-                if ! tar -xf "$archive_path" -C "$tmpd"; then error "wget_source tar fallback failed"; _cleanup; return 1; fi
-            elif unzip -t "$archive_path" >/dev/null 2>&1; then
-                if ! unzip -q "$archive_path" -d "$tmpd"; then error "wget_source unzip fallback failed"; _cleanup; return 1; fi
-            else
-                error "wget_source unknown or unsupported archive format: '$mime'"
-                _cleanup
-                return 1
-            fi
-            ;;
-    esac
-
-    # list top-level entries (one-per-line). Note: this will break only for entries with embedded newlines.
-    top_entries=$(find "$tmpd" -mindepth 1 -maxdepth 1 -print)
-    count=$(printf '%s\n' "$top_entries" | sed -n '$=')
-
-    if [ "$count" -ne 1 ]; then
-        error "wget_source archive must contain exactly one top-level entry (found $count)"
-        _cleanup
+    if declare -F with_ohloha_lock >/dev/null 2>&1; then
+        if ! with_ohloha_lock "source-sha256-${archive_digest}" extract_clean_source_snapshot "$archive_path" "$clean_dir"; then
+            error "wget_source clean source snapshot failed"
+            return 1
+        fi
+    elif ! extract_clean_source_snapshot "$archive_path" "$clean_dir"; then
+        error "wget_source clean source snapshot failed"
         return 1
     fi
 
-    topdir=$(printf '%s\n' "$top_entries" | sed -n '1p')
-
-    if [ ! -d "$topdir" ]; then
-        error "wget_source top-level entry is not a directory"
-        _cleanup
+    # copy clean source snapshot to desired output location
+    if [ -d "${output_dir}" ]; then
+        rm -rf "${output_dir}"
+    fi
+    mkdir -p "$(dirname "${output_dir}")"
+    if ! cp -a "$clean_dir" "${output_dir}"; then
+        error "wget_source clean source copy failed"
         return 1
     fi
-
-    # move/rename top-level directory to desired name
-	if [ -d "${output_dir}" ]; then
-		# override
-		rm -rf ${output_dir}
-	fi
-    if ! mv -- "$topdir" "${output_dir}"; then
-        error "wget_source rename/move failed"
-        _cleanup
-        return 1
-    fi
-
-    # remove temp artefacts (tmpd may now be empty)
-    _cleanup
 
     return 0
 }

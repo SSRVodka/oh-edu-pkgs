@@ -101,7 +101,7 @@
 任务：
 
 - [x] 引入 `.ohloha/downloads/<source-key>.archive` 保存原始下载文件。
-- [ ] 引入 `.ohloha/sources/<source-id>/clean` 保存干净解压源码。
+- [x] 引入 `.ohloha/sources/<source-id>/clean` 保存干净解压源码。
 - [ ] 引入 `.ohloha/sources/<patched-source-id>/patched` 保存应用包/版本 patch 后的源码快照。
 - [ ] 每次 cache miss 从 patched source snapshot 复制、硬链接或 reflink 到 `.ohloha/work/<build-id>/src-root/<pkg_name>`。
 - [ ] `current_source_root` 指向 workdir 内源码副本。
