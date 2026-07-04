@@ -2,6 +2,13 @@
 
 本文件给后续 Agent 提供本仓库的项目指引、环境前置和修改规约。适用范围为仓库根目录及其所有子目录。
 
+## 长期规划文档
+
+- `TODO.md`：记录构建系统重构的短期目标、阶段性里程碑和验收标准。
+- `DESIGN.md`：记录长期架构设计、边界、缓存模型、DAG 并发、多版本和 patch 归属方案。
+
+当上下文被压缩、任务目标不清楚、准备修改 `builder.sh` / `setup2.sh` / 根目录脚本 / 父目录 Go 项目，或不确定下一步该做什么时，先阅读 `TODO.md` 和 `DESIGN.md`，再继续实施。每个阶段建议用独立 git commit 管理，提交前确认没有纳入无关生成物或用户已有修改。
+
 ## 项目定位
 
 `ohloha_pkgs` 是 ohloha 包管理器的 OpenHarmony/鸿蒙原生依赖迁移仓库。每个包目录保存一个源码级交叉编译方案，通常包含：
@@ -18,18 +25,29 @@
 - 主机依赖见 `DEPS`。可以在合适的容器/系统环境中执行 `source ./DEPS`，但不要在未获用户同意时假设可以修改系统包。
 - 构建会下载上游源码，网络不可用时不要把下载失败误判为包脚本错误。
 - 默认目标架构为 `aarch64` / `arm64-v8a`。可通过 `builder.sh --cpu=aarch64|arm|x86_64` 指定目标。
+- 可用编译环境：可以通过 `ssh kiwi` 登录远端机器；可使用工作目录为 `/home/gjy/Desktop/tmp-robot/`。远端 OHOS SDK 位于 `/home/gjy/Desktop/oh_sdk/18`，Go 位于 `/home/gjy/Desktop/tmp-robot/go`。需要在该目录下 clone 或同步 `tools_ohloha` 后执行编译验证。首次使用前先检查并显式设置 `OHOS_SDK=/home/gjy/Desktop/oh_sdk/18`、`PATH=/home/gjy/Desktop/tmp-robot/go/bin:$PATH`，同时确认 `git`、`python3` 等环境可用。kiwi 端网络或 pip 下载失败时，先 `source ~/ipads-proxy.env` 再重试。
+
+## 代码质量要求
+
+- 重构必须按 `TODO.md` 的阶段边界推进，避免把 host 环境隔离、缓存、并发、多版本等大改混在一个不可验证的提交里。
+- 保持向后兼容：旧的 `BUILD` hook 变量、旧的 `./builder.sh <BUILD>...` 用法、旧的 `dist.<cpu>.<pkg>` 输出在迁移期不能无说明破坏。
+- 优先写可验证的小改动。每次修改根脚本后至少执行 `bash -n builder.sh setup2.sh`；修改包脚本后执行 `bash -n <pkg>/BUILD`。
+- 不允许把生成物、缓存、远端编译产物、`.ohloha/`、`.staging*`、`dist*`、`crossenv_*`、`deploy/`、`meson-scripts/*.meson` 纳入提交。
+- 对共享状态必须显式加锁或隔离；不要引入新的全局临时目录、全局 Meson 文件、全局安装前缀写入。
+- 对构建环境的修改要保守：不要无提示修改系统 Python 包，不要无必要写入 OHOS SDK 目录。
+- 代码应保持 Bash 严格模式兼容，变量引用尽量加引号，失败路径要返回明确错误；不要依赖 `$PWD`、隐式 `cd` 或跨包环境变量泄漏。
 
 ## 重要目录和生成物
 
 这些目录/文件主要由构建流程生成或缓存，通常不要手动维护、提交或基于它们推断源码状态：
 
 - `.staging/`：目标源码缓存，源码目录为 `.staging/<pkg_name>`。
-- `.staging.native/`、`.staging.ndst/`：native/host 构建缓存和工具输出。
+- `.ohloha/native/sources/`、`.ohloha/native/dst/`：native/host 构建缓存和工具输出。`native_sources_root`、`native_dst_root` 变量短期保留给旧 hook 使用，但路径不再指向旧 `.staging.*`。
 - `dist.<cpu>.<pkg>`：单包目标输出目录，例如 `dist.aarch64.openssl`。
 - `dist.<cpu>`：构建中间安装前缀，成功后通常被移动/合并到 `dist.<cpu>.<pkg>`。
 - `dist.wheels/`、`crossenv_<cpu>/`、`deploy/`。
 - `meson-scripts/*.meson`：由 `setup2.sh` 从 `*.meson.template` 重写生成。
-- `VERSION`：由 `./gen-versions.sh` 从各包 `BUILD` 生成；不要手动编辑。
+- `PKG_INDEX.json`：未来用于替代 `VERSION` / `VERSIONS` 的机器可读包索引。`VERSION` / `VERSIONS` 文本清单视为旧方案，后续可以废弃，不需要为新重构保持兼容。
 
 `.gitignore` 已覆盖上述大多数生成物。修改时优先触碰包目录、`patches/`、模板或根目录脚本。
 
@@ -75,10 +93,16 @@
 ./test-build-all.sh
 ```
 
-生成版本清单：
+生成旧版文本清单（deprecated）：
 
 ```bash
 ./gen-versions.sh
+```
+
+生成 JSON 包索引：
+
+```bash
+./gen-pkg-index.sh
 ```
 
 部署所有已构建包：
@@ -172,9 +196,11 @@ fi
 
 ## 版本和清单
 
-- `VERSION` 是生成物，运行 `./gen-versions.sh` 后会从每个一级包目录的 `BUILD` 抽取 `pkg_name`、`pkg_version`、`pkg_deps`、`pkg_build_deps`。
-- `VERSIONS` 是已有静态参考清单；除非任务明确要求维护它，否则不要用它替代 `BUILD` 内的真实元数据。
-- 打包部署使用 `VERSION` 和 `dist.<cpu>.<pkg>`。
+- 新设计以 `builder.sh --print-meta` 和未来的 `PKG_INDEX.json` 为准。`PKG_INDEX.json` 应记录 `build_file`、版本、依赖、构建类型、source URL、patch 文件等机器可读信息。
+- `VERSION` 和 `VERSIONS` 属于旧文本索引方案，后续可以删除或只作为迁移期产物；不要为了兼容它们牺牲代码正确性和简洁性。
+- 部署/打包脚本后续应读取 `PKG_INDEX.json` 或构建 artifact manifest，而不是依赖 `VERSION` / `VERSIONS` 的列位置。
+
+- `VERSION` 当前仍可能被旧脚本读取，但新功能不应继续扩展该格式。
 
 ## 修改和验证流程
 
@@ -186,7 +212,7 @@ fi
 4. 优先使用 `pkg_build_*` 字段和 helper；只在必要时写 hook。
 5. 若新增包或修改依赖，检查 `test-deps.sh`。
 6. 能构建时至少运行目标包及其依赖的 `./builder.sh ...`；无法构建时说明缺失的环境、网络或 SDK 条件。
-7. 如需刷新包清单，运行 `./gen-versions.sh`，但不要手工编辑 `VERSION`。
+7. 如需维护包清单，优先实现或刷新 JSON 包索引；只有处理旧脚本时才运行 `./gen-versions.sh`。
 
 提交前检查：
 

@@ -21,12 +21,13 @@ target_root_with_pkgname=""
 target_root_prefix_without_pkgname=""
 
 native_project_root=$(dirname $(readlink -f $0))
-native_sources_root=${native_project_root}/.staging.native
+native_cache_root=${native_project_root}/.ohloha/native
+native_sources_root=${native_cache_root}/sources
 # ${native_dst_root}/bin will be added to PATH and ${native_dst_root}/lib
 # will be added to LD_LIBRARY_PATH when executing build_package
 # TODO: move host-python to here
-native_dst_root=${native_project_root}/.staging.ndst
-mkdir -p ${native_sources_root}
+native_dst_root=${native_cache_root}/dst
+mkdir -p "${native_sources_root}" "${native_dst_root}"
 
 
 # Validation rules
@@ -109,6 +110,139 @@ MESON_VARS=(
 
 clear_vars() {
     unset "${PKG_VARS[@]}" "${AUTOTOOLS_VARS[@]}" "${CMAKE_VARS[@]}" "${MESON_VARS[@]}" 2>/dev/null || true
+}
+
+set_arch_env_from_cpu() {
+    local cpu="${1:-}"
+    [ -z "$cpu" ] && return 0
+    export OHOS_CPU="$cpu"
+    if [ "${OHOS_CPU}" = "aarch64" ]; then
+        export OHOS_ARCH="arm64-v8a"
+    elif [ "${OHOS_CPU}" = "arm" ]; then
+        export OHOS_ARCH="armeabi-v7a"
+    elif [ "${OHOS_CPU}" = "x86_64" ]; then
+        export OHOS_ARCH="x86_64"
+    else
+        error "Unsupported cpu '$OHOS_CPU' (supported 'aarch64', 'arm', 'x86_64')"
+        return 1
+    fi
+}
+
+setup_metadata_defaults() {
+    export OHOS_SDK="${OHOS_SDK:-}"
+    OHOS_SDK_API_VERSION="${OHOS_SDK_API_VERSION:-}"
+    if [ -z "${OHOS_CPU:-}" ]; then
+        set_arch_env_from_cpu "aarch64"
+    elif [ -z "${OHOS_ARCH:-}" ]; then
+        set_arch_env_from_cpu "${OHOS_CPU}"
+    fi
+    export OHOS_LIBDIR="${OHOS_LIBDIR:-lib}"
+    TARGET_ROOT="${TARGET_ROOT:-${native_project_root}/dist.${OHOS_CPU}}"
+    PATCH_FILE_ROOT="${PATCH_FILE_ROOT:-${native_project_root}/patches}"
+    MESON_CROSS_ROOT="${MESON_CROSS_ROOT:-${native_project_root}/meson-scripts}"
+    MESON_CROSS_FILE_BASE="${MESON_CROSS_FILE_BASE:-${MESON_CROSS_ROOT}/base.meson}"
+    PY_VERSION="${PY_VERSION:-3.12}"
+    PY_VERSION_CODE="${PY_VERSION_CODE:-312}"
+    BUILD_PLATFORM_TRIPLET="${BUILD_PLATFORM_TRIPLET:-x86_64-pc-linux-gnu}"
+    HOST_SYSROOT="${HOST_SYSROOT:-${OHOS_SDK:-}/native/sysroot}"
+    HOST_LIBC="${HOST_LIBC:-${HOST_SYSROOT}/usr/lib/${OHOS_CPU}-linux-ohos/libc.so}"
+    HOST_PYTHON_DIST="${HOST_PYTHON_DIST:-${TARGET_ROOT}.python3}"
+    NUMPY_LIBROOT="${NUMPY_LIBROOT:-}"
+    NUMPY2_LIBROOT="${NUMPY2_LIBROOT:-}"
+    BUILD_PYTHON="${BUILD_PYTHON:-python3}"
+    CC="${CC:-cc}"
+    CXX="${CXX:-c++}"
+    AS="${AS:-as}"
+    LD="${LD:-ld}"
+    LDXX="${LDXX:-${LD}}"
+    STRIP="${STRIP:-strip}"
+    RANLIB="${RANLIB:-ranlib}"
+    OBJDUMP="${OBJDUMP:-objdump}"
+    OBJCOPY="${OBJCOPY:-objcopy}"
+    READELF="${READELF:-readelf}"
+    NM="${NM:-nm}"
+    AR="${AR:-ar}"
+    PROFDATA="${PROFDATA:-profdata}"
+    CFLAGS="${CFLAGS:-}"
+    CXXFLAGS="${CXXFLAGS:-}"
+    CPPFLAGS="${CPPFLAGS:-}"
+    LDFLAGS="${LDFLAGS:-}"
+    LDSHARED="${LDSHARED:-}"
+    PKG_CONFIG_PATH="${PKG_CONFIG_PATH:-}"
+    PKG_CONFIG_LIBDIR="${PKG_CONFIG_LIBDIR:-}"
+    PKG_CONFIG_SYSTEM_IGNORE_PATH="${PKG_CONFIG_SYSTEM_IGNORE_PATH:-}"
+}
+
+json_escape() {
+    local value="${1:-}"
+    value=${value//\\/\\\\}
+    value=${value//\"/\\\"}
+    value=${value//$'\n'/\\n}
+    value=${value//$'\r'/\\r}
+    value=${value//$'\t'/\\t}
+    printf '%s' "$value"
+}
+
+json_string() {
+    printf '"%s"' "$(json_escape "${1:-}")"
+}
+
+json_csv_array() {
+    local csv="${1:-}"
+    local first=true item
+    printf '['
+    if [ -n "$csv" ]; then
+        local old_ifs="$IFS"
+        IFS=','
+        for item in $csv; do
+            if [ -z "$item" ]; then
+                continue
+            fi
+            if [ "$first" = true ]; then
+                first=false
+            else
+                printf ','
+            fi
+            json_string "$item"
+        done
+        IFS="$old_ifs"
+    fi
+    printf ']'
+}
+
+print_package_meta() {
+    local build_file="${1:-}"
+    [[ ! -f "$build_file" ]] && error "BUILD file not found: $build_file" && return 1
+
+    clear_vars
+    setup_metadata_defaults || { clear_vars; return 1; }
+    source "$build_file"
+    setup || { error "setup() failed"; clear_vars; return 1; }
+    validate_config || { clear_vars; return 1; }
+
+    local abs_build_file
+    abs_build_file=$(readlink -f "$build_file")
+    local rel_build_file="$abs_build_file"
+    case "$abs_build_file" in
+        "$native_project_root"/*)
+            rel_build_file="${abs_build_file#"$native_project_root"/}"
+            ;;
+    esac
+
+    printf '{\n'
+    printf '  "name": '; json_string "${pkg_name:-}"; printf ',\n'
+    printf '  "version": '; json_string "${pkg_version:-}"; printf ',\n'
+    printf '  "build_file": '; json_string "$rel_build_file"; printf ',\n'
+    printf '  "deps": '; json_csv_array "${pkg_deps:-}"; printf ',\n'
+    printf '  "build_deps": '; json_csv_array "${pkg_build_deps:-}"; printf ',\n'
+    printf '  "source_url": '; json_string "${pkg_source_url:-}"; printf ',\n'
+    printf '  "release_url": '; json_string "${pkg_release_url:-}"; printf ',\n'
+    printf '  "license": '; json_string "${pkg_license:-}"; printf ',\n'
+    printf '  "support_archs": '; json_csv_array "${pkg_support_archs:-}"; printf ',\n'
+    printf '  "build_type": '; json_string "${pkg_build_type:-}"; printf '\n'
+    printf '}\n'
+
+    clear_vars
 }
 
 save_xcompile_flags() {
@@ -521,10 +655,20 @@ build_package() {
 main() {
     local CONTINUE_ON_FAIL=false
     local OHOS_CPU_VALUE=""
+    local PRINT_META=false
+    local BUILD_ONE=false
 
     # parse simple options
     while [ "$#" -gt 0 ]; do
         case "$1" in
+            --print-meta)
+                PRINT_META=true
+                shift
+                ;;
+            --build-one)
+                BUILD_ONE=true
+                shift
+                ;;
             --continue-on-fail)
                 CONTINUE_ON_FAIL=true
                 shift
@@ -547,7 +691,24 @@ main() {
         esac
     done
 
-    [[ $# -eq 0 ]] && echo "Usage: $0 [--continue-on-fail] [--cpu=aarch64|arm|x86_64] <BUILD_FILE> [BUILD_FILE...]" && exit 1
+    [[ $# -eq 0 ]] && echo "Usage: $0 [--print-meta] [--build-one] [--continue-on-fail] [--cpu=aarch64|arm|x86_64] <BUILD_FILE> [BUILD_FILE...]" && exit 1
+
+    if [ "$PRINT_META" = true ]; then
+        if [ "$#" -ne 1 ]; then
+            error "--print-meta expects exactly one BUILD file"
+            exit 2
+        fi
+        if [ -n "$OHOS_CPU_VALUE" ]; then
+            set_arch_env_from_cpu "$OHOS_CPU_VALUE" || exit 1
+        fi
+        print_package_meta "$1"
+        exit $?
+    fi
+
+    if [ "$BUILD_ONE" = true ] && [ "$#" -ne 1 ]; then
+        error "--build-one expects exactly one BUILD file"
+        exit 2
+    fi
 
     # trigger presetup env hooks
     for build_file in "$@"; do
@@ -557,17 +718,7 @@ main() {
 
     # Specify OHOS_CPU & OHOS_ARCH for setup.sh if --cpu was provided
     if [ -n "$OHOS_CPU_VALUE" ]; then
-        export OHOS_CPU="$OHOS_CPU_VALUE"
-        if [ "${OHOS_CPU}" = "aarch64" ]; then
-            export OHOS_ARCH="arm64-v8a"
-        elif [ "${OHOS_CPU}" = "arm" ]; then
-            export OHOS_ARCH="armeabi-v7a"
-        elif [ "${OHOS_CPU}" = "x86_64" ]; then
-            export OHOS_ARCH="x86_64"
-        else
-            error "Unsupported cpu '$OHOS_CPU' (supported 'aarch64', 'arm', 'x86_64')"
-            exit 1
-        fi
+        set_arch_env_from_cpu "$OHOS_CPU_VALUE" || exit 1
     fi
 
     . setup2.sh

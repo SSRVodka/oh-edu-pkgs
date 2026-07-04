@@ -14,6 +14,89 @@ OLD_LD_LIBPATH=${LD_LIBRARY_PATH:=""}
 
 trap "export PATH=${OLD_PATH}; export LD_LIBRARY_PATH=${OLD_LD_LIBPATH}; unset CC CXX AS LD LDXX LLD STRIP RANLIB OBJDUMP OBJCOPY READELF NM AR PROFDATA CFLAGS CXXFLAGS CPPFLAGS LDFLAGS LDSHARED PKG_CONFIG_PATH PKG_CONFIG_LIBDIR PKG_CONFIG_SYSTEM_IGNORE_PATH" ERR SIGINT SIGTERM
 
+OHLOHA_ROOT=${CUR_DIR}/.ohloha
+OHLOHA_LOCK_ROOT=${OHLOHA_ROOT}/locks
+OHLOHA_TOOL_WRAPPER_ROOT=${OHLOHA_ROOT}/tool-wrappers
+HOST_TOOLS_VENV=${OHLOHA_ROOT}/host-venv
+HOST_TOOLS_BIN=${HOST_TOOLS_VENV}/bin
+HOST_TOOLS_PYTHON=${HOST_TOOLS_BIN}/python3
+HOST_TOOLS_PIP=${HOST_TOOLS_BIN}/pip
+PIP_CACHE_DIR=${OHLOHA_ROOT}/pip-cache
+export PIP_CACHE_DIR
+
+mkdir -p "${OHLOHA_LOCK_ROOT}" "${OHLOHA_TOOL_WRAPPER_ROOT}" "${PIP_CACHE_DIR}"
+
+with_ohloha_lock() {
+	local lock_name="${1:?lock name is required}"
+	shift
+	local lock_dir="${OHLOHA_LOCK_ROOT}/${lock_name}.lock"
+	local pid_file="${lock_dir}/pid"
+	local waited=0
+	local missing_pid_waits=0
+	while ! mkdir "${lock_dir}" 2>/dev/null; do
+		local owner_pid=""
+		if [ -f "${pid_file}" ]; then
+			owner_pid=$(cat "${pid_file}" 2>/dev/null || true)
+		fi
+		if [ -n "${owner_pid}" ] && ! kill -0 "${owner_pid}" 2>/dev/null; then
+			warn "removing stale lock '${lock_name}' from pid ${owner_pid}"
+			rm -rf "${lock_dir}"
+			continue
+		fi
+		if [ -z "${owner_pid}" ]; then
+			missing_pid_waits=$((missing_pid_waits + 1))
+			if [ "${missing_pid_waits}" -ge 5 ]; then
+				warn "removing stale lock '${lock_name}' without owner pid"
+				rm -rf "${lock_dir}"
+				missing_pid_waits=0
+				continue
+			fi
+		else
+			missing_pid_waits=0
+		fi
+		if [ "$waited" -eq 0 ]; then
+			info "waiting for lock: ${lock_name}"
+		fi
+		waited=1
+		sleep 1
+	done
+	printf '%s\n' "$$" > "${pid_file}"
+	trap 'rm -rf "${lock_dir}"' RETURN
+	local rc=0
+	"$@" || rc=$?
+	rm -rf "${lock_dir}"
+	trap - RETURN
+	return "$rc"
+}
+
+ensure_host_tools_unlocked() {
+	if [ ! -x "${HOST_TOOLS_PYTHON}" ]; then
+		info "creating host tools venv: ${HOST_TOOLS_VENV}"
+		python3 -m venv "${HOST_TOOLS_VENV}"
+	fi
+
+	local -a missing_tools=()
+	if ! "${HOST_TOOLS_PYTHON}" -c 'import mesonbuild' >/dev/null 2>&1; then
+		missing_tools+=(meson)
+	fi
+	if [ ! -x "${HOST_TOOLS_BIN}/ninja" ]; then
+		missing_tools+=(ninja)
+	fi
+	if ! "${HOST_TOOLS_PYTHON}" -c 'import crossenv' >/dev/null 2>&1; then
+		missing_tools+=(crossenv)
+	fi
+
+	if [ "${#missing_tools[@]}" -gt 0 ]; then
+		info "installing missing host build tools into private venv: ${missing_tools[*]}"
+		"${HOST_TOOLS_PYTHON}" -m pip install --disable-pip-version-check "${missing_tools[@]}"
+	fi
+}
+
+ensure_host_tools() {
+	with_ohloha_lock host-tools ensure_host_tools_unlocked
+	export PATH="${HOST_TOOLS_BIN}:$PATH"
+}
+
 if [ -z "${OHOS_SDK:-}" ]; then
 	warn "please set OHOS_SDK env first"
 	exit 0
@@ -50,6 +133,8 @@ export OHOS_LIBDIR=lib
 # Set this for OHOS sdk installation
 # export OHOS_LIBDIR=lib/${OHOS_CPU}-linux-ohos
 
+ensure_host_tools
+
 # NOTE: We no longer need gfortran for OpenBLAS
 ## Note: Fortran compiler should be changed with ARCH
 ## Use gnu here instead of ohos: code gen only
@@ -73,12 +158,6 @@ export LD=${OHOS_SDK}/native/llvm/bin/ld.lld
 export LDXX=${LD}
 export LLD=${LD}
 export STRIP=${OHOS_SDK}/native/llvm/bin/llvm-strip
-# let `install` to use toolchain's strip
-if [ ! -f ${OHOS_SDK}/native/llvm/bin/strip ]; then
-	pushd ${OHOS_SDK}/native/llvm/bin
-	ln -s llvm-strip strip
-	popd
-fi
 export RANLIB=${OHOS_SDK}/native/llvm/bin/llvm-ranlib
 export OBJDUMP=${OHOS_SDK}/native/llvm/bin/llvm-objdump
 export OBJCOPY=${OHOS_SDK}/native/llvm/bin/llvm-objcopy
@@ -86,11 +165,10 @@ export READELF=${OHOS_SDK}/native/llvm/bin/llvm-readelf
 export NM=${OHOS_SDK}/native/llvm/bin/llvm-nm
 export AR=${OHOS_SDK}/native/llvm/bin/llvm-ar
 export PROFDATA=${OHOS_SDK}/native/llvm/bin/llvm-profdata
-if [ ! -f ${OHOS_SDK}/native/llvm/bin/profdata ]; then
-	pushd ${OHOS_SDK}/native/llvm/bin
-	ln -s llvm-profdata profdata
-	popd
-fi
+TOOL_WRAPPER_BIN=${OHLOHA_TOOL_WRAPPER_ROOT}/${OHOS_SDK_API_VERSION}/${OHOS_CPU}/bin
+mkdir -p "${TOOL_WRAPPER_BIN}"
+ln -sfn "${OHOS_SDK}/native/llvm/bin/llvm-strip" "${TOOL_WRAPPER_BIN}/strip"
+ln -sfn "${OHOS_SDK}/native/llvm/bin/llvm-profdata" "${TOOL_WRAPPER_BIN}/profdata"
 #export CFLAGS="-fPIC -D__MUSL__=1 -D__OPENHARMONY__=1 -I${TARGET_ROOT}/include -I${TARGET_ROOT}/include/lzma -I${TARGET_ROOT}/include/ncursesw -I${TARGET_ROOT}/include/readline -I${TARGET_ROOT}/ssl/include"
 # keep track with ohos.toolchain.cmake + CMAKE_C_FLAGS_INIT
 # including arch-dependent headers
@@ -101,7 +179,7 @@ export CPPFLAGS=${CXXFLAGS}
 export LDFLAGS="-fuse-ld=lld -lm -L${TARGET_ROOT}/lib -L${HOST_SYSROOT}/usr/${OHOS_LIBDIR}"
 export LDSHARED="${CC} ${LDFLAGS} -shared"
 
-export PATH=$PATH:${OHOS_SDK}/native/llvm/bin:${OHOS_SDK}/native/toolchains
+export PATH=${TOOL_WRAPPER_BIN}:$PATH:${OHOS_SDK}/native/llvm/bin:${OHOS_SDK}/native/toolchains
 
 export PKG_CONFIG_SYSTEM_IGNORE_PATH=/usr/local/lib/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig
 export PKG_CONFIG_LIBDIR="${HOST_SYSROOT}/usr/${OHOS_LIBDIR}:${HOST_SYSROOT}/usr/${OHOS_LIBDIR}/pkgconfig"
@@ -634,7 +712,7 @@ reset_meson() {
 
 enter_pycrossenv() {
 	if [[ ! -d ${PY_CROSS_ROOT} ]]; then
-		$BUILD_PIP install crossenv
+		$BUILD_PIP install --disable-pip-version-check crossenv
 		$BUILD_PYTHON -m crossenv \
 			$HOST_PYTHON \
 			${CROSS_ROOT}
@@ -683,13 +761,14 @@ setup_rust_cross_compile() {
 	export PYO3_CROSS_LIB_DIR="${HOST_PYTHON_DIST}/lib"
 	export PYO3_CROSS_INCLUDE_DIR="${HOST_PYTHON_DIST}/include/python${PY_VERSION}"
 
-	# libgcc_s stub (OH uses libunwind, Rust musl target expects libgcc_s)
-	echo "" | ${OHOS_SDK}/native/llvm/bin/llvm-ar rcs \
-		${ohos_sysroot}/usr/lib/aarch64-linux-ohos/libgcc_s.a 2>/dev/null || true
+	# libgcc_s stub (OH uses libunwind, Rust musl target expects libgcc_s).
+	# TODO: move this to .ohloha/sysroot-overlay instead of touching the SDK sysroot.
+	with_ohloha_lock libgcc-stub bash -c \
+		'echo "" | "$1" rcs "$2" 2>/dev/null || true' \
+		_ \
+		"${OHOS_SDK}/native/llvm/bin/llvm-ar" \
+		"${ohos_sysroot}/usr/lib/aarch64-linux-ohos/libgcc_s.a"
 }
-
-# prepare meson in host env
-pip install meson
 
 if [ ! -d ${CUR_DIR}/meson-scripts ]; then
     warn "cannot find meson template directory: ${CUR_DIR}/meson-scripts"

@@ -17,6 +17,7 @@ meson-scripts/*.meson
 
 # ignore generated VERSION
 VERSION
+PKG_INDEX.json
 
 *.tar.gz
 *.tar.xz
@@ -28,3 +29,4 @@ VERSION
 *.old
 .vscode
 .staging*
+.ohloha/
