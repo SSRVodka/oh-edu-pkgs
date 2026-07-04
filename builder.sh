@@ -20,6 +20,7 @@ current_build_root=""
 target_root_with_pkgname=""
 target_root_prefix_without_pkgname=""
 current_source_fresh=false
+current_work_root=""
 
 native_project_root=$(dirname "$(readlink -f "$0")")
 ohloha_root=${native_project_root}/.ohloha
@@ -401,6 +402,53 @@ publish_patched_source_snapshot() {
     fi
 
     cleanup_patched_snapshot_tmp
+}
+
+compute_build_work_root() {
+    local build_file="${1:-}"
+    local id_input patch_hashes source_archive source_archive_sha256
+    id_input=$(mktemp)
+    patch_hashes=$(mktemp)
+    cleanup_build_work_tmp() {
+        rm -f "$id_input" "$patch_hashes"
+    }
+
+    source_archive_sha256=""
+    if [ -n "${pkg_source_url:-}" ]; then
+        source_archive=$(source_archive_path_for_url "$pkg_source_url")
+        if [ -f "$source_archive" ]; then
+            source_archive_sha256="sha256:$(sha256_file "$source_archive")"
+        fi
+    fi
+
+    append_file_hash "$build_file" "$patch_hashes"
+    collect_patch_hashes "$build_file" "$patch_hashes" || { cleanup_build_work_tmp; return 1; }
+
+    {
+        printf 'format=1\n'
+        printf 'pkg_name=%s\n' "${pkg_name:-}"
+        printf 'pkg_version=%s\n' "${pkg_version:-}"
+        printf 'pkg_build_type=%s\n' "${pkg_build_type:-}"
+        printf 'ohos_cpu=%s\n' "${OHOS_CPU:-}"
+        printf 'ohos_arch=%s\n' "${OHOS_ARCH:-}"
+        printf 'ohos_api=%s\n' "${OHOS_SDK_API_VERSION:-}"
+        printf 'source_archive_sha256=%s\n' "$source_archive_sha256"
+        printf 'cflags=%s\n' "${CFLAGS:-}"
+        printf 'cxxflags=%s\n' "${CXXFLAGS:-}"
+        printf 'cppflags=%s\n' "${CPPFLAGS:-}"
+        printf 'ldflags=%s\n' "${LDFLAGS:-}"
+        printf 'pkg_config_libdir=%s\n' "${PKG_CONFIG_LIBDIR:-}"
+        local var
+        for var in "${PKG_VARS[@]}" "${AUTOTOOLS_VARS[@]}" "${CMAKE_VARS[@]}" "${MESON_VARS[@]}"; do
+            printf 'var:%s=%s\n' "$var" "${!var:-}"
+        done
+        sort -u "$patch_hashes" | sed 's/^/file:/'
+    } > "$id_input"
+
+    local digest
+    digest=$(sha256_file "$id_input")
+    printf '%s/work/sha256-%s' "$ohloha_root" "$digest"
+    cleanup_build_work_tmp
 }
 
 get_pkg_patch_files() {
@@ -966,6 +1014,12 @@ build() {
     local target="${pkg_name}"
     # parse build deps
     local deps_sep_space=$(get_pkg_names_from_deps "$pkg_build_deps")
+    local cmake_build_dir="ohos-build"
+    local meson_build_dir="ohos-build"
+    if [ -n "${current_work_root:-}" ]; then
+        cmake_build_dir="${current_work_root}/build/cmake"
+        meson_build_dir="${current_work_root}/build/meson"
+    fi
 
     info "start building '$pkg_name' with deps: '$deps_sep_space'"
 
@@ -1003,7 +1057,7 @@ build() {
                 "$pkg_build_cmake_extra_ldflags" \
                 "$pkg_build_parallism" \
                 "$pkg_build_cmake_extra_cmake_findroot_path" \
-                "ohos-build" \
+                "$cmake_build_dir" \
             || { error "build_cmakeproj_with_deps failed"; return 1; }
             ;;
         xmeson)
@@ -1017,7 +1071,7 @@ build() {
                 "$pkg_build_meson_extra_ldflags" \
                 "$pkg_build_meson_extra_cmake_prefix_path" \
                 "$pkg_build_meson_extra_cmake_findroot_path" \
-                "ohos-build" \
+                "$meson_build_dir" \
             || { error "build_mesonproj_with_deps failed"; return 1; }
             ;;
         xpure-python)
@@ -1066,6 +1120,13 @@ build_package() {
     target_root_prefix_without_pkgname="${TARGET_ROOT}"
     target_root_with_pkgname="$(get_pkg_dst_dir $pkg_name)"
     current_source_fresh=false
+    current_work_root=$(compute_build_work_root "$build_file") || {
+        error "compute_build_work_root for '$build_file' failed"
+        restore_xcompile_flags
+        clear_vars
+        return 1
+    }
+    mkdir -p "$current_work_root"
 
     # download if ${current_source_root} doesn't exist or flushed using optional pkg_force_clean_build
     if [ -n "${pkg_force_clean_build:-}" ]; then
