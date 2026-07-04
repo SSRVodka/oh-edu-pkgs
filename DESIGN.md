@@ -207,6 +207,37 @@ target_root_with_pkgname=.ohloha/work/<build-id>/install/dist.<cpu>.<pkg>
 --log-file=/path/to/log
 ```
 
+`--resolved-deps` 文件由父目录 Go 调度器生成，`builder.sh` 只消费其中已经解析好的结果，不做依赖闭包或版本求解。当前 worker 端至少支持以下 dependency artifact 输入形态，并把结果规范化后写入 build fingerprint 和 artifact manifest：
+
+```json
+{
+  "dependency_artifacts": {
+    "libz": "sha256:..."
+  }
+}
+```
+
+兼容的简写形式：
+
+```json
+{
+  "libz": "sha256:..."
+}
+```
+
+也可以为每个依赖传对象，artifact id 字段可用 `artifact_id`、`artifact`、`build_id` 或 `cache_key`：
+
+```json
+[
+  {
+    "name": "libz",
+    "artifact_id": "sha256:..."
+  }
+]
+```
+
+这只描述已解析依赖的 artifact 身份；依赖路径、多版本选择和冲突诊断仍属于 Go 调度器职责。
+
 ## Artifact Manifest
 
 artifact manifest 是缓存可信的依据。建议格式：

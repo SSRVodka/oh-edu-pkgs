@@ -24,6 +24,7 @@ current_work_root=""
 current_build_id=""
 builder_no_cache=false
 builder_force_rebuild=false
+resolved_deps_file=""
 
 native_project_root=$(dirname "$(readlink -f "$0")")
 ohloha_root=${native_project_root}/.ohloha
@@ -726,7 +727,7 @@ write_artifact_manifest() {
     local payload_sha256="${3:-}"
     local manifest_path="${4:-}"
     local abs_build_file rel_build_file postinst_path postinst_sha256 source_archive_sha256
-    local patch_hashes script_hashes payload_size created_at
+    local patch_hashes script_hashes dependency_artifacts payload_size created_at
 
     [ -n "$build_file" ] || { error "write_artifact_manifest: empty build file"; return 1; }
     [ -f "$payload_path" ] || { error "write_artifact_manifest: payload not found: '$payload_path'"; return 1; }
@@ -747,13 +748,19 @@ write_artifact_manifest() {
 
     patch_hashes=$(mktemp)
     script_hashes=$(mktemp)
+    dependency_artifacts=$(mktemp)
     : > "$patch_hashes"
     : > "$script_hashes"
+    : > "$dependency_artifacts"
     if ! collect_patch_hashes "$abs_build_file" "$patch_hashes"; then
-        rm -f "$patch_hashes" "$script_hashes"
+        rm -f "$patch_hashes" "$script_hashes" "$dependency_artifacts"
         return 1
     fi
     collect_script_hashes "$script_hashes"
+    if ! collect_dependency_artifacts "${resolved_deps_file:-}" > "$dependency_artifacts"; then
+        rm -f "$patch_hashes" "$script_hashes" "$dependency_artifacts"
+        return 1
+    fi
 
     {
         printf '{\n'
@@ -792,7 +799,7 @@ write_artifact_manifest() {
         printf '    "LDFLAGS": '; json_string "${LDFLAGS:-}"; printf ',\n'
         printf '    "PKG_CONFIG_LIBDIR": '; json_string "${PKG_CONFIG_LIBDIR:-}"; printf '\n'
         printf '  },\n'
-        printf '  "dependency_artifacts": {},\n'
+        printf '  "dependency_artifacts": '; json_dependency_artifacts_object "$dependency_artifacts"; printf ',\n'
         printf '  "payload": "payload.tar.zst",\n'
         printf '  "payload_sha256": '; json_string "sha256:${payload_sha256}"; printf ',\n'
         printf '  "payload_size": %s,\n' "$payload_size"
@@ -800,7 +807,7 @@ write_artifact_manifest() {
         printf '}\n'
     } > "$manifest_path"
 
-    rm -f "$patch_hashes" "$script_hashes"
+    rm -f "$patch_hashes" "$script_hashes" "$dependency_artifacts"
 }
 
 write_artifact_cache_unlocked() {
@@ -968,6 +975,7 @@ write_build_fingerprint_input() {
     local input_out="${2:-}"
     local file_hashes="${3:-}"
     local abs_build_file rel_build_file build_dir postinst_name meson_template
+    local dependency_artifacts
 
     [ -n "$input_out" ] || { error "write_build_fingerprint_input: missing input output path"; return 1; }
     [ -n "$file_hashes" ] || { error "write_build_fingerprint_input: missing file hashes path"; return 1; }
@@ -989,6 +997,11 @@ write_build_fingerprint_input() {
         [ -f "$meson_template" ] && append_file_hash "$meson_template" "$file_hashes"
     done
     collect_patch_hashes "$abs_build_file" "$file_hashes" || return 1
+    dependency_artifacts=$(mktemp)
+    if ! collect_dependency_artifacts "${resolved_deps_file:-}" > "$dependency_artifacts"; then
+        rm -f "$dependency_artifacts"
+        return 1
+    fi
 
     {
         printf 'format=1\n'
@@ -1022,8 +1035,10 @@ write_build_fingerprint_input() {
         for var in "${PKG_VARS[@]}" "${AUTOTOOLS_VARS[@]}" "${CMAKE_VARS[@]}" "${MESON_VARS[@]}"; do
             printf 'var:%s=%s\n' "$var" "$(normalize_build_input_value "${!var:-}")"
         done
+        sort -u "$dependency_artifacts" | sed 's/^/dependency_artifact:/'
         sort -u "$file_hashes" | sed 's/^/file:/'
     } > "$input_out"
+    rm -f "$dependency_artifacts"
 }
 
 prepare_meson_cross_file_for_build() {
@@ -1124,6 +1139,78 @@ json_file_hash_object() {
     printf '}'
 }
 
+collect_dependency_artifacts() {
+    local deps_file="${1:-${resolved_deps_file:-}}"
+
+    [ -n "$deps_file" ] || return 0
+    if [ ! -f "$deps_file" ]; then
+        error "resolved deps file not found: $deps_file"
+        return 1
+    fi
+
+    python3 - "$deps_file" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    data = json.load(f)
+
+if isinstance(data, dict) and isinstance(data.get("dependency_artifacts"), dict):
+    data = data["dependency_artifacts"]
+
+rows = []
+if isinstance(data, dict):
+    items = data.items()
+elif isinstance(data, list):
+    items = []
+    for item in data:
+        if isinstance(item, dict):
+            name = item.get("name") or item.get("pkg") or item.get("package")
+            if name:
+                items.append((name, item))
+else:
+    raise SystemExit("resolved deps JSON must be an object or list")
+
+for name, value in items:
+    artifact = ""
+    if isinstance(value, str):
+        artifact = value
+    elif isinstance(value, dict):
+        artifact = (
+            value.get("artifact_id")
+            or value.get("artifact")
+            or value.get("build_id")
+            or value.get("cache_key")
+            or ""
+        )
+    if artifact:
+        rows.append((str(name), str(artifact)))
+
+for name, artifact in sorted(set(rows)):
+    print(f"{name}\t{artifact}")
+PY
+}
+
+json_dependency_artifacts_object() {
+    local artifacts_file="${1:-}"
+    local first=true name artifact
+
+    printf '{'
+    while IFS=$'\t' read -r name artifact; do
+        [ -n "$name" ] || continue
+        if [ "$first" = true ]; then
+            first=false
+        else
+            printf ','
+        fi
+        printf '\n    '; json_string "$name"; printf ': '; json_string "$artifact"
+    done < "$artifacts_file"
+    if [ "$first" = false ]; then
+        printf '\n  '
+    fi
+    printf '}'
+}
+
 print_package_meta() {
     local build_file="${1:-}"
     [[ ! -f "$build_file" ]] && error "BUILD file not found: $build_file" && return 1
@@ -1209,14 +1296,20 @@ print_package_cache_key() {
     rel_build_file=$(relpath_from_project "$abs_build_file")
     source_archive_sha256=$(source_archive_sha256_for_url "${pkg_source_url:-}")
 
-    local file_hashes input_blob
+    local file_hashes input_blob dependency_artifacts
     file_hashes=$(mktemp)
     input_blob=$(mktemp)
+    dependency_artifacts=$(mktemp)
     cleanup_cache_key_tmp() {
-        rm -f "$file_hashes" "$input_blob"
+        rm -f "$file_hashes" "$input_blob" "$dependency_artifacts"
     }
 
     if ! write_build_fingerprint_input "$abs_build_file" "$input_blob" "$file_hashes"; then
+        cleanup_cache_key_tmp
+        clear_vars
+        return 1
+    fi
+    if ! collect_dependency_artifacts "${resolved_deps_file:-}" > "$dependency_artifacts"; then
         cleanup_cache_key_tmp
         clear_vars
         return 1
@@ -1238,6 +1331,7 @@ print_package_cache_key() {
     printf '  "deps": '; json_csv_array "${pkg_deps:-}"; printf ',\n'
     printf '  "build_deps": '; json_csv_array "${pkg_build_deps:-}"; printf ',\n'
     printf '  "patch_files": '; json_csv_array "${pkg_patch_files:-}"; printf ',\n'
+    printf '  "dependency_artifacts": '; json_dependency_artifacts_object "$dependency_artifacts"; printf ',\n'
     printf '  "files": '; json_file_hash_object "$file_hashes"; printf '\n'
     printf '}\n'
 
@@ -1844,6 +1938,19 @@ main() {
                 builder_force_rebuild=true
                 shift
                 ;;
+            --resolved-deps=*)
+                resolved_deps_file="${1#--resolved-deps=}"
+                shift
+                ;;
+            --resolved-deps)
+                shift
+                if [ "$#" -eq 0 ]; then
+                    error "--resolved-deps expects a JSON file path"
+                    exit 2
+                fi
+                resolved_deps_file="$1"
+                shift
+                ;;
             --continue-on-fail)
                 CONTINUE_ON_FAIL=true
                 shift
@@ -1866,7 +1973,7 @@ main() {
         esac
     done
 
-    [[ $# -eq 0 ]] && echo "Usage: $0 [--print-meta] [--cache-key] [--build-one] [--no-cache] [--force-rebuild] [--continue-on-fail] [--cpu=aarch64|arm|x86_64] <BUILD_FILE> [BUILD_FILE...]" && exit 1
+    [[ $# -eq 0 ]] && echo "Usage: $0 [--print-meta] [--cache-key] [--build-one] [--resolved-deps=FILE] [--no-cache] [--force-rebuild] [--continue-on-fail] [--cpu=aarch64|arm|x86_64] <BUILD_FILE> [BUILD_FILE...]" && exit 1
 
     if [ "$PRINT_META" = true ]; then
         if [ "$#" -ne 1 ]; then

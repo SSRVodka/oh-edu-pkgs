@@ -130,7 +130,7 @@
 - [x] cache hit 前校验 manifest 和 payload 完整性。
 - [x] 构建失败不写 `success`，artifact 写入成功后才发布 legacy dist。
 - [ ] 新增调试选项；已支持 `--no-cache`、`--force-rebuild`，待补 `--keep-failed-work`。
-- [ ] 缓存 key 包含已解析依赖的 artifact id，而不是仅依赖名。
+- [x] `builder.sh --resolved-deps` 支持把已解析依赖 artifact id 写入缓存 key 和 manifest；父目录 Go 侧传入该文件仍待接入。
 
 fingerprint 至少包含：
 
