@@ -341,11 +341,8 @@ source_archive_path_for_url() {
     printf '%s/sha256-%s.archive' "$download_cache_root" "$source_digest"
 }
 
-publish_patched_source_snapshot() {
+compute_patched_source_snapshot_dir() {
     local build_file="${1:-}"
-    local source_root="${2:-}"
-    [ -d "$source_root" ] || return 0
-
     local id_input patch_hashes source_archive source_identity
     id_input=$(mktemp)
     patch_hashes=$(mktemp)
@@ -382,6 +379,18 @@ publish_patched_source_snapshot() {
     local patched_digest patched_dir
     patched_digest=$(sha256_file "$id_input")
     patched_dir="${source_cache_root}/sha256-${patched_digest}/patched"
+    cleanup_patched_snapshot_tmp
+    printf '%s\n' "$patched_dir"
+}
+
+publish_patched_source_snapshot() {
+    local build_file="${1:-}"
+    local source_root="${2:-}"
+    [ -d "$source_root" ] || return 0
+
+    local patched_dir patched_id
+    patched_dir=$(compute_patched_source_snapshot_dir "$build_file") || return 1
+    patched_id=$(basename "$(dirname "$patched_dir")")
 
     publish_patched_source_snapshot_unlocked() {
         local _source_root="${1:?source root must be set}"
@@ -403,18 +412,46 @@ publish_patched_source_snapshot() {
     }
 
     if declare -F with_ohloha_lock >/dev/null 2>&1; then
-        if ! with_ohloha_lock "patched-source-sha256-${patched_digest}" publish_patched_source_snapshot_unlocked "$source_root" "$patched_dir"; then
-            cleanup_patched_snapshot_tmp
+        if ! with_ohloha_lock "patched-source-${patched_id}" publish_patched_source_snapshot_unlocked "$source_root" "$patched_dir"; then
             return 1
         fi
     else
         if ! publish_patched_source_snapshot_unlocked "$source_root" "$patched_dir"; then
-            cleanup_patched_snapshot_tmp
             return 1
         fi
     fi
+}
 
-    cleanup_patched_snapshot_tmp
+prepare_work_source_root() {
+    local build_file="${1:-}"
+    local fallback_source_root="${2:-}"
+    local source_root="$fallback_source_root"
+    local patched_dir
+
+    if patched_dir=$(compute_patched_source_snapshot_dir "$build_file") && [ -d "$patched_dir" ]; then
+        source_root="$patched_dir"
+    fi
+
+    if [ ! -d "$source_root" ]; then
+        error "cannot prepare work source; source directory not found: '$source_root'"
+        return 1
+    fi
+    if [ -z "${current_work_root:-}" ]; then
+        return 0
+    fi
+
+    local work_sources_root work_source_root
+    work_sources_root="${current_work_root}/src-root"
+    work_source_root="${work_sources_root}/${pkg_name}"
+    rm -rf "$work_source_root"
+    mkdir -p "$work_sources_root"
+    if ! cp -a "$source_root" "$work_source_root"; then
+        error "failed to copy source into workdir: '$source_root' -> '$work_source_root'"
+        return 1
+    fi
+
+    sources_root="$work_sources_root"
+    current_source_root="$work_source_root"
 }
 
 compute_build_work_root() {
@@ -1046,6 +1083,11 @@ build() {
     local current_build_file_dir=$(dirname $(readlink -f $current_build_file))
 
     local target="${pkg_name}"
+    local build_sources_root="${SRC_ROOT}"
+    if [ -n "${current_source_root:-}" ]; then
+        target=$(basename "$current_source_root")
+        build_sources_root=$(dirname "$current_source_root")
+    fi
     # parse build deps
     local deps_sep_space=$(get_pkg_names_from_deps "$pkg_build_deps")
     local cmake_build_dir="ohos-build"
@@ -1067,7 +1109,7 @@ build() {
         return 0;
     fi
 
-    pushd ${SRC_ROOT}
+    pushd "$build_sources_root"
 
     case "x${pkg_build_type:-}" in
         xautotools)
@@ -1172,12 +1214,12 @@ build_package() {
         download || { error "download for '$build_file' failed"; restore_xcompile_flags; clear_vars; return 1; }
     fi
 
+    local legacy_source_root="$current_source_root"
     print_vars
     if [ ! -f "${current_source_root}/PATCHED_BY_OHLOHA" ]; then
         prebuilt_patch_once_hook || { error "prebuilt_patch_once_hook for '$build_file' failed"; restore_xcompile_flags; clear_vars; return 1; }
         touch "${current_source_root}/PATCHED_BY_OHLOHA"
     fi
-    prebuilt_patch_hook || { error "prebuilt_patch_hook for '$build_file' failed"; restore_xcompile_flags; clear_vars; return 1; }
     if [ "x${current_source_fresh:-false}" = "xtrue" ]; then
         publish_patched_source_snapshot "$build_file" "$current_source_root" || {
             error "publish_patched_source_snapshot for '$build_file' failed"
@@ -1186,6 +1228,13 @@ build_package() {
             return 1
         }
     fi
+    prepare_work_source_root "$build_file" "$legacy_source_root" || {
+        error "prepare_work_source_root for '$build_file' failed"
+        restore_xcompile_flags
+        clear_vars
+        return 1
+    }
+    prebuilt_patch_hook || { error "prebuilt_patch_hook for '$build_file' failed"; restore_xcompile_flags; clear_vars; return 1; }
     build "$build_file" || { error "Build $build_file failed"; restore_xcompile_flags; clear_vars; return 1; }
     postbuilt_hook || { error "postbuilt_hook for '$build_file' failed"; restore_xcompile_flags; clear_vars; return 1; }
 
