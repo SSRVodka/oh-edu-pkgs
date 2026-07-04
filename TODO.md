@@ -68,7 +68,7 @@
 
 - [x] 新增 `builder.sh --print-meta <BUILD_FILE>`，输出 JSON 元数据。
 - [x] 新增 `builder.sh --build-one --cpu=<cpu> <BUILD_FILE>`，只构建一个包。
-- [ ] 新增 `builder.sh --cache-key --cpu=<cpu> <BUILD_FILE>`，输出构建 fingerprint 或构建输入摘要。
+- [x] 新增 `builder.sh --cache-key --cpu=<cpu> <BUILD_FILE>`，输出构建 fingerprint 或构建输入摘要。
 - [x] 保留旧用法 `./builder.sh dep/BUILD foo/BUILD`，内部可串行调用 `build_one`。
 - [x] `--print-meta` 输出至少包含 `name`、`version`、`build_file`、`deps`、`build_deps`、`source_url`、`build_type`、`support_archs`。
 - [ ] 父目录 Go 项目读取 `--print-meta` 或未来的 `PKG_INDEX.json`，废弃四列 `VERSION` 数据源。
@@ -155,7 +155,7 @@ fingerprint 至少包含：
 
 任务：
 
-- [ ] 新增 `pkg_patch_files` 变量或等价机制，允许 BUILD 显式声明 patch 文件。
+- [x] 新增 `pkg_patch_files` 变量或等价机制，允许 BUILD 显式声明 patch 文件。
 - [ ] 新增 helper：`get_pkg_patch_files`、`apply_pkg_patches`、`apply_pkg_git_patches`。
 - [ ] 约定私有 patch 放入 `<pkg>/patches/<pkg_version>/`。
 - [ ] 根目录 `patches/` 只保留真正跨包共享的 patch，或迁移为 `patches/shared/`。

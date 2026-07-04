@@ -42,6 +42,8 @@ pkg_build_type=""
 pkg_build_parallism=""
 # [OPTIONAL: empty or Y]
 pkg_force_clean_build=""
+# [OPTIONAL, separated by commas, NO-SPACE]. Relative paths are resolved from this package directory, then repo root.
+pkg_patch_files=""
 
 ####### build type related (all OPTIONAL) #######
 

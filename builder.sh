@@ -87,7 +87,7 @@ mv_pkg_to_dst_dir() {
 PKG_VARS=(
     pkg_version pkg_name pkg_deps pkg_build_deps pkg_source_url pkg_release_url
     pkg_license pkg_support_archs pkg_build_type pkg_build_parallism
-    pkg_force_clean_build
+    pkg_force_clean_build pkg_patch_files
 )
 
 AUTOTOOLS_VARS=(
@@ -210,6 +210,131 @@ json_csv_array() {
     printf ']'
 }
 
+relpath_from_project() {
+    local path="${1:-}"
+    local abs_path
+    abs_path=$(readlink -f "$path")
+    case "$abs_path" in
+        "$native_project_root"/*)
+            printf '%s' "${abs_path#"$native_project_root"/}"
+            ;;
+        *)
+            printf '%s' "$abs_path"
+            ;;
+    esac
+}
+
+sha256_file() {
+    sha256sum "$1" | awk '{print $1}'
+}
+
+append_file_hash() {
+    local file="${1:-}"
+    local out="${2:-}"
+    [ -f "$file" ] || return 0
+    printf '%s\t%s\n' "$(relpath_from_project "$file")" "$(sha256_file "$file")" >> "$out"
+}
+
+resolve_patch_file() {
+    local patch_ref="${1:-}"
+    local build_dir="${2:-}"
+
+    if [ -z "$patch_ref" ]; then
+        return 1
+    elif [[ "$patch_ref" = /* ]]; then
+        [ -f "$patch_ref" ] && printf '%s\n' "$patch_ref"
+    elif [ -f "${build_dir}/${patch_ref}" ]; then
+        printf '%s\n' "${build_dir}/${patch_ref}"
+    elif [ -f "${native_project_root}/${patch_ref}" ]; then
+        printf '%s\n' "${native_project_root}/${patch_ref}"
+    elif [ -f "${PATCH_FILE_ROOT}/${patch_ref}" ]; then
+        printf '%s\n' "${PATCH_FILE_ROOT}/${patch_ref}"
+    else
+        return 1
+    fi
+}
+
+expand_patch_ref() {
+    local patch_ref="${1:-}"
+    patch_ref=${patch_ref//\$\{pkg_name\}/${pkg_name:-}}
+    patch_ref=${patch_ref//\$pkg_name/${pkg_name:-}}
+    patch_ref=${patch_ref//\$\{pkg_version\}/${pkg_version:-}}
+    patch_ref=${patch_ref//\$pkg_version/${pkg_version:-}}
+    printf '%s' "$patch_ref"
+}
+
+detect_referenced_patch_files() {
+    local build_file="${1:-}"
+    python3 - "$build_file" <<'PY'
+import pathlib
+import re
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8", errors="ignore")
+patterns = [
+    r"\$\{?PATCH_FILE_ROOT\}?/([^\s'\";&|<>]+)",
+    r"\$\{?native_project_root\}?/patches/([^\s'\";&|<>]+)",
+]
+seen = set()
+for pattern in patterns:
+    for match in re.findall(pattern, text):
+        path = "patches/" + match
+        if path not in seen:
+            seen.add(path)
+            print(path)
+PY
+}
+
+collect_patch_hashes() {
+    local build_file="${1:-}"
+    local out="${2:-}"
+    local build_dir
+    build_dir=$(dirname "$(readlink -f "$build_file")")
+
+    local patch_ref patch_file
+    if [ -n "${pkg_patch_files:-}" ]; then
+        local old_ifs="$IFS"
+        IFS=','
+        for patch_ref in $pkg_patch_files; do
+            patch_ref=$(expand_patch_ref "$patch_ref")
+            [ -z "$patch_ref" ] && continue
+            if ! patch_file=$(resolve_patch_file "$patch_ref" "$build_dir"); then
+                error "declared patch file not found: $patch_ref"
+                return 1
+            fi
+            append_file_hash "$patch_file" "$out"
+        done
+        IFS="$old_ifs"
+    fi
+
+    while IFS= read -r patch_ref; do
+        patch_ref=$(expand_patch_ref "$patch_ref")
+        [ -z "$patch_ref" ] && continue
+        if patch_file=$(resolve_patch_file "$patch_ref" "$build_dir"); then
+            append_file_hash "$patch_file" "$out"
+        fi
+    done < <(detect_referenced_patch_files "$build_file")
+}
+
+json_file_hash_object() {
+    local file="${1:-}"
+    local first=true rel hash
+    printf '{'
+    while IFS=$'\t' read -r rel hash; do
+        [ -z "$rel" ] && continue
+        if [ "$first" = true ]; then
+            first=false
+        else
+            printf ','
+        fi
+        printf '\n    '; json_string "$rel"; printf ': '; json_string "sha256:$hash"
+    done < <(sort -u "$file")
+    if [ "$first" = false ]; then
+        printf '\n  '
+    fi
+    printf '}'
+}
+
 print_package_meta() {
     local build_file="${1:-}"
     [[ ! -f "$build_file" ]] && error "BUILD file not found: $build_file" && return 1
@@ -239,9 +364,124 @@ print_package_meta() {
     printf '  "release_url": '; json_string "${pkg_release_url:-}"; printf ',\n'
     printf '  "license": '; json_string "${pkg_license:-}"; printf ',\n'
     printf '  "support_archs": '; json_csv_array "${pkg_support_archs:-}"; printf ',\n'
-    printf '  "build_type": '; json_string "${pkg_build_type:-}"; printf '\n'
+    printf '  "build_type": '; json_string "${pkg_build_type:-}"; printf ',\n'
+    printf '  "patch_files": '; json_csv_array "${pkg_patch_files:-}"; printf '\n'
     printf '}\n'
 
+    clear_vars
+}
+
+load_sdk_api_version_for_metadata() {
+    if [ -n "${OHOS_SDK_API_VERSION:-}" ]; then
+        return 0
+    fi
+    if [ -n "${OHOS_SDK:-}" ] && [ -f "${OHOS_SDK}/toolchains/oh-uni-package.json" ]; then
+        OHOS_SDK_API_VERSION=$(python3 - "$OHOS_SDK/toolchains/oh-uni-package.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    print(json.load(f).get("apiVersion", ""))
+PY
+)
+    fi
+}
+
+tool_version_line() {
+    local tool="${1:-}"
+    if [ -z "$tool" ]; then
+        return 0
+    fi
+    if [ -x "$tool" ]; then
+        "$tool" --version 2>/dev/null | sed -n '1p' || true
+    elif command -v "$tool" >/dev/null 2>&1; then
+        "$tool" --version 2>/dev/null | sed -n '1p' || true
+    fi
+}
+
+print_package_cache_key() {
+    local build_file="${1:-}"
+    [[ ! -f "$build_file" ]] && error "BUILD file not found: $build_file" && return 1
+
+    clear_vars
+    setup_metadata_defaults || { clear_vars; return 1; }
+    load_sdk_api_version_for_metadata
+    source "$build_file"
+    setup || { error "setup() failed"; clear_vars; return 1; }
+    validate_config || { clear_vars; return 1; }
+
+    local abs_build_file rel_build_file build_dir
+    abs_build_file=$(readlink -f "$build_file")
+    rel_build_file=$(relpath_from_project "$abs_build_file")
+    build_dir=$(dirname "$abs_build_file")
+
+    local file_hashes input_blob
+    file_hashes=$(mktemp)
+    input_blob=$(mktemp)
+    cleanup_cache_key_tmp() {
+        rm -f "$file_hashes" "$input_blob"
+    }
+
+    append_file_hash "$abs_build_file" "$file_hashes"
+    for postinst_name in postinst POSTINST PostInst; do
+        append_file_hash "${build_dir}/${postinst_name}" "$file_hashes"
+    done
+    append_file_hash "${native_project_root}/builder.sh" "$file_hashes"
+    append_file_hash "${native_project_root}/setup2.sh" "$file_hashes"
+    append_file_hash "${native_project_root}/cleanup.sh" "$file_hashes"
+    append_file_hash "${native_project_root}/cmake/ohos.toolchain.xhw.cmake" "$file_hashes"
+    for meson_template in "${native_project_root}"/meson-scripts/*.meson.template; do
+        [ -f "$meson_template" ] && append_file_hash "$meson_template" "$file_hashes"
+    done
+    if ! collect_patch_hashes "$abs_build_file" "$file_hashes"; then
+        cleanup_cache_key_tmp
+        clear_vars
+        return 1
+    fi
+
+    {
+        printf 'format=1\n'
+        printf 'name=%s\n' "${pkg_name:-}"
+        printf 'version=%s\n' "${pkg_version:-}"
+        printf 'build_file=%s\n' "$rel_build_file"
+        printf 'ohos_cpu=%s\n' "${OHOS_CPU:-}"
+        printf 'ohos_arch=%s\n' "${OHOS_ARCH:-}"
+        printf 'ohos_sdk=%s\n' "${OHOS_SDK:-}"
+        printf 'ohos_api=%s\n' "${OHOS_SDK_API_VERSION:-}"
+        printf 'ohos_libdir=%s\n' "${OHOS_LIBDIR:-}"
+        printf 'target_root=%s\n' "${TARGET_ROOT:-}"
+        printf 'host_sysroot=%s\n' "${HOST_SYSROOT:-}"
+        printf 'clang=%s\n' "$(tool_version_line "${OHOS_SDK:-}/native/llvm/bin/clang")"
+        printf 'cmake=%s\n' "$(tool_version_line cmake)"
+        printf 'meson=%s\n' "$(tool_version_line meson)"
+        printf 'ninja=%s\n' "$(tool_version_line ninja)"
+        printf 'python=%s\n' "$(tool_version_line python3)"
+        local var
+        for var in "${PKG_VARS[@]}" "${AUTOTOOLS_VARS[@]}" "${CMAKE_VARS[@]}" "${MESON_VARS[@]}"; do
+            printf 'var:%s=%s\n' "$var" "${!var:-}"
+        done
+        sort -u "$file_hashes" | sed 's/^/file:/'
+    } > "$input_blob"
+
+    local digest
+    digest=$(sha256_file "$input_blob")
+
+    printf '{\n'
+    printf '  "format": 1,\n'
+    printf '  "algorithm": "sha256",\n'
+    printf '  "build_id": '; json_string "sha256:$digest"; printf ',\n'
+    printf '  "name": '; json_string "${pkg_name:-}"; printf ',\n'
+    printf '  "version": '; json_string "${pkg_version:-}"; printf ',\n'
+    printf '  "build_file": '; json_string "$rel_build_file"; printf ',\n'
+    printf '  "arch": '; json_string "${OHOS_CPU:-}"; printf ',\n'
+    printf '  "ohos_api": '; json_string "${OHOS_SDK_API_VERSION:-}"; printf ',\n'
+    printf '  "deps": '; json_csv_array "${pkg_deps:-}"; printf ',\n'
+    printf '  "build_deps": '; json_csv_array "${pkg_build_deps:-}"; printf ',\n'
+    printf '  "patch_files": '; json_csv_array "${pkg_patch_files:-}"; printf ',\n'
+    printf '  "files": '; json_file_hash_object "$file_hashes"; printf '\n'
+    printf '}\n'
+
+    cleanup_cache_key_tmp
     clear_vars
 }
 
@@ -323,6 +563,7 @@ validate_config() {
     
     [[ -n "${pkg_deps:-}" ]] && ! validate_no_space "$pkg_deps" && error "pkg_deps cannot contain spaces" && ((errors++))
     [[ -n "${pkg_build_deps:-}" ]] && ! validate_no_space "$pkg_build_deps" && error "pkg_build_deps cannot contain spaces" && ((errors++))
+    [[ -n "${pkg_patch_files:-}" ]] && ! validate_no_space "$pkg_patch_files" && error "pkg_patch_files cannot contain spaces" && ((errors++))
 
     return $errors
 }
@@ -657,12 +898,17 @@ main() {
     local OHOS_CPU_VALUE=""
     local PRINT_META=false
     local BUILD_ONE=false
+    local CACHE_KEY=false
 
     # parse simple options
     while [ "$#" -gt 0 ]; do
         case "$1" in
             --print-meta)
                 PRINT_META=true
+                shift
+                ;;
+            --cache-key)
+                CACHE_KEY=true
                 shift
                 ;;
             --build-one)
@@ -691,7 +937,7 @@ main() {
         esac
     done
 
-    [[ $# -eq 0 ]] && echo "Usage: $0 [--print-meta] [--build-one] [--continue-on-fail] [--cpu=aarch64|arm|x86_64] <BUILD_FILE> [BUILD_FILE...]" && exit 1
+    [[ $# -eq 0 ]] && echo "Usage: $0 [--print-meta] [--cache-key] [--build-one] [--continue-on-fail] [--cpu=aarch64|arm|x86_64] <BUILD_FILE> [BUILD_FILE...]" && exit 1
 
     if [ "$PRINT_META" = true ]; then
         if [ "$#" -ne 1 ]; then
@@ -702,6 +948,18 @@ main() {
             set_arch_env_from_cpu "$OHOS_CPU_VALUE" || exit 1
         fi
         print_package_meta "$1"
+        exit $?
+    fi
+
+    if [ "$CACHE_KEY" = true ]; then
+        if [ "$#" -ne 1 ]; then
+            error "--cache-key expects exactly one BUILD file"
+            exit 2
+        fi
+        if [ -n "$OHOS_CPU_VALUE" ]; then
+            set_arch_env_from_cpu "$OHOS_CPU_VALUE" || exit 1
+        fi
+        print_package_cache_key "$1"
         exit $?
     fi
 

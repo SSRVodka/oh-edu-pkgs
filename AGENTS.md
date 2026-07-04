@@ -65,6 +65,13 @@
 ./builder.sh foo/BUILD
 ```
 
+输出单包元数据或构建输入摘要：
+
+```bash
+./builder.sh --print-meta foo/BUILD
+./builder.sh --cache-key --cpu=aarch64 foo/BUILD
+```
+
 按已知拓扑序构建多个包：
 
 ```bash
@@ -130,6 +137,7 @@
 - `pkg_source_url` 或 `pkg_release_url` 至少一个非空；下载器期望归档包解压后只有一个顶层目录。
 - `pkg_support_archs` 用逗号分隔，可选值包括 `x86_64,aarch64,arm,riscv`。
 - `pkg_build_type` 只能是 `autotools`、`cmake`、`meson`、`pure-python`、`custom`。
+- `pkg_patch_files` 可选，用英文逗号分隔，不能包含空格；优先用于声明当前包实际使用的 patch 文件，路径相对包目录或仓库根目录解析。
 
 依赖规则：
 
