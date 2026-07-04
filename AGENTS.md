@@ -169,7 +169,8 @@
 补丁建议：
 
 - 简单、稳定的小替换可在 hook 中使用绝对路径 `sed`。
-- 较大或可审查性更重要的变更放到 `patches/`，在 `prebuilt_patch_once_hook` 中 `patch --dry-run` 后再应用。
+- 较大或可审查性更重要的变更放到包私有 `patches/<pkg_version>/` 目录，并在 `pkg_patch_files` 中声明。
+- 在 `prebuilt_patch_once_hook` 中优先使用 `apply_pkg_patches` 或 `apply_pkg_git_patches`；只有特殊参数或特殊工作目录需求时才手写 `patch --dry-run` / `git apply --check`。
 
 ## 构建类型指引
 

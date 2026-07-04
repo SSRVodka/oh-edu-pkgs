@@ -316,6 +316,64 @@ collect_patch_hashes() {
     done < <(detect_referenced_patch_files "$build_file")
 }
 
+get_pkg_patch_files() {
+    local build_dir="${current:-${native_project_root}}"
+    local patch_refs=("$@")
+    local patch_ref patch_file
+
+    if [ "${#patch_refs[@]}" -eq 0 ]; then
+        if [ -z "${pkg_patch_files:-}" ]; then
+            return 0
+        fi
+        local old_ifs="$IFS"
+        IFS=','
+        read -r -a patch_refs <<< "${pkg_patch_files}"
+        IFS="$old_ifs"
+    fi
+
+    for patch_ref in "${patch_refs[@]}"; do
+        patch_ref=$(expand_patch_ref "$patch_ref")
+        [ -z "$patch_ref" ] && continue
+        if ! patch_file=$(resolve_patch_file "$patch_ref" "$build_dir"); then
+            error "patch file not found: $patch_ref"
+            return 1
+        fi
+        printf '%s\n' "$patch_file"
+    done
+}
+
+apply_pkg_patches() {
+    local strip_level="-p1"
+    if [[ "${1:-}" =~ ^-p[0-9]+$ ]]; then
+        strip_level="$1"
+        shift
+    fi
+
+    local patch_list patch_file
+    patch_list=$(get_pkg_patch_files "$@") || return 1
+    while IFS= read -r patch_file; do
+        [ -z "$patch_file" ] && continue
+        patch "$strip_level" --dry-run < "$patch_file"
+        patch "$strip_level" < "$patch_file"
+    done <<< "$patch_list"
+}
+
+apply_pkg_git_patches() {
+    local src_root="${current_source_root:-}"
+    if [ -z "$src_root" ]; then
+        error "current_source_root is empty; apply_pkg_git_patches must run inside a package build hook"
+        return 1
+    fi
+
+    local patch_list patch_file
+    patch_list=$(get_pkg_patch_files "$@") || return 1
+    while IFS= read -r patch_file; do
+        [ -z "$patch_file" ] && continue
+        git -C "$src_root" apply --check "$patch_file"
+        git -C "$src_root" apply "$patch_file"
+    done <<< "$patch_list"
+}
+
 json_file_hash_object() {
     local file="${1:-}"
     local first=true rel hash
