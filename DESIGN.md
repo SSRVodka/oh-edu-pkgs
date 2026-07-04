@@ -310,7 +310,9 @@ cache hit 必须满足：
         0001-ohos.patch
 ```
 
-`BUILD` 可显式声明：
+`BUILD` 可显式声明。这里的 `patches/${pkg_version}/...` 是相对当前包目录解析，例如
+`boost/BUILD` 中的声明会指向 `boost/patches/1.81.0/...`，不是仓库根目录
+`patches/1.81.0/...`：
 
 ```bash
 pkg_patch_files="patches/${pkg_version}/0001-ohos-cross-build.patch"
@@ -319,7 +321,7 @@ pkg_patch_files="patches/${pkg_version}/0001-ohos-cross-build.patch"
 helper：
 
 ```bash
-apply_pkg_patches p1
+apply_pkg_patches -p1
 apply_pkg_git_patches
 ```
 

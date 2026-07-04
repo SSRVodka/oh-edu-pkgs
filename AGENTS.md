@@ -112,6 +112,13 @@
 ./gen-pkg-index.sh
 ```
 
+检查 patch 归属：
+
+```bash
+./lint-patches.sh
+./lint-patches.sh --strict
+```
+
 部署所有已构建包：
 
 ```bash
@@ -137,7 +144,7 @@
 - `pkg_source_url` 或 `pkg_release_url` 至少一个非空；下载器期望归档包解压后只有一个顶层目录。
 - `pkg_support_archs` 用逗号分隔，可选值包括 `x86_64,aarch64,arm,riscv`。
 - `pkg_build_type` 只能是 `autotools`、`cmake`、`meson`、`pure-python`、`custom`。
-- `pkg_patch_files` 可选，用英文逗号分隔，不能包含空格；优先用于声明当前包实际使用的 patch 文件，路径相对包目录或仓库根目录解析。
+- `pkg_patch_files` 可选，用英文逗号分隔，不能包含空格；优先用于声明当前包实际使用的 patch 文件。推荐写法是 `patches/${pkg_version}/xxx.patch`，这个路径相对当前包目录解析，即 `<pkg>/patches/<pkg_version>/xxx.patch`，不是仓库根目录 `patches/<pkg_version>/xxx.patch`。
 
 依赖规则：
 
@@ -169,7 +176,7 @@
 补丁建议：
 
 - 简单、稳定的小替换可在 hook 中使用绝对路径 `sed`。
-- 较大或可审查性更重要的变更放到包私有 `patches/<pkg_version>/` 目录，并在 `pkg_patch_files` 中声明。
+- 较大或可审查性更重要的变更放到包私有 `<pkg>/patches/<pkg_version>/` 目录，并在 `pkg_patch_files` 中声明。
 - 在 `prebuilt_patch_once_hook` 中优先使用 `apply_pkg_patches` 或 `apply_pkg_git_patches`；只有特殊参数或特殊工作目录需求时才手写 `patch --dry-run` / `git apply --check`。
 
 ## 构建类型指引
