@@ -39,6 +39,7 @@ pkg_support_archs="x86_64,aarch64,arm"
 pkg_build_type="autotools"
 # [OPTIONAL]
 pkg_build_parallism=""
+pkg_patch_files="patches/${pkg_version}/0001-fix-linux-btrace-page-size-on-ohos.patch"
 
 ####### build type related (all OPTIONAL) #######
 
@@ -124,8 +125,7 @@ prebuilt_patch_hook() {
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
 	pushd ${current_source_root}
-	patch -p1 --dry-run < ${PATCH_FILE_ROOT}/oh-gdb.patch
-	patch -p1 < ${PATCH_FILE_ROOT}/oh-gdb.patch
+	apply_pkg_patches -p1
 	popd
 }
 

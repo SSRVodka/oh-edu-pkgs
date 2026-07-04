@@ -42,6 +42,7 @@ pkg_build_type="cmake"
 pkg_build_parallism=""
 # [OPTIONAL: empty or Y]
 pkg_force_clean_build=""
+pkg_patch_files="patches/${pkg_version}/0001-fix-nasm-3-detection.patch"
 
 ####### build type related (all OPTIONAL) #######
 
@@ -128,7 +129,7 @@ prebuilt_patch_hook() {
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
 	pushd ${current_source_root}
-	patch -Np1 -i ../patches/libaom-3.13.1-nasm3-1.patch
+	apply_pkg_patches -p1
 	popd
 }
 

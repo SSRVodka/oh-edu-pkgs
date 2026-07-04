@@ -33,6 +33,7 @@ pkg_support_archs="x86_64,aarch64,arm"
 pkg_build_type="cmake"
 # [OPTIONAL]
 pkg_build_parallism=""
+pkg_patch_files="patches/${pkg_version}/0001-adjust-deps-and-mlas-for-ohos.patch"
 
 ####### build type related (all OPTIONAL) #######
 
@@ -122,8 +123,7 @@ prebuilt_patch_hook() {
 # Hook: same as `prebuilt_patch_hook` but executed once if the source directory is not changed (mark file PATCHED)
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
-	git -C "${current_source_root}" apply --check ${PATCH_FILE_ROOT}/oh-onnxruntime.patch
-	git -C "${current_source_root}" apply ${PATCH_FILE_ROOT}/oh-onnxruntime.patch
+	apply_pkg_git_patches
 }
 
 # Hook: customize building process.

@@ -41,6 +41,7 @@ pkg_build_type="autotools"
 pkg_build_parallism="1"
 # [OPTIONAL: empty or Y]
 pkg_force_clean_build=""
+pkg_patch_files="patches/${pkg_version}/0001-adjust-makefiles-for-ohos.patch"
 
 ####### build type related (all OPTIONAL) #######
 
@@ -127,8 +128,7 @@ prebuilt_patch_hook() {
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
 	pushd ${current_source_root}
-	patch -p0 --dry-run < ${PATCH_FILE_ROOT}/oh-lua-5.4.3.patch
-	patch -p0 < ${PATCH_FILE_ROOT}/oh-lua-5.4.3.patch
+	apply_pkg_patches -p0
 	popd
 }
 

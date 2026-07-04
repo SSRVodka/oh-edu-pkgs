@@ -42,6 +42,7 @@ pkg_build_type="autotools"
 pkg_build_parallism=""
 # [OPTIONAL: empty or Y]
 pkg_force_clean_build=""
+pkg_patch_files="patches/${pkg_version}/0001-disable-pthread-cancel-on-ohos.patch"
 
 ####### build type related (all OPTIONAL) #######
 
@@ -127,8 +128,7 @@ prebuilt_patch_hook() {
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
 	pushd ${current_source_root}
-	patch -p0 --dry-run < ${PATCH_FILE_ROOT}/oh-cups-2.4.2.patch
-	patch -p0 < ${PATCH_FILE_ROOT}/oh-cups-2.4.2.patch
+	apply_pkg_patches -p0
 	popd
 }
 
