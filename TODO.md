@@ -13,16 +13,14 @@
 - 系统环境干净：不再依赖系统 Python 的全局 `pip install`，不随意写入 OHOS SDK 目录。
 - patch 有归属：私有 patch 按包和版本放置，缓存只追踪当前包实际使用的 patch。
 
-## 当前已知问题
+## 当前状态和剩余问题
 
-- `builder.sh` 把源码缓存和构建工作区都放在 `.staging/<pkg_name>`，导致 `configure`、CMake、Meson、手写 hook 的副作用跨架构、跨 flags 复用。
-- `setup2.sh` 固定使用 `.staging` 和 `dist.<cpu>`，`dist.<cpu>` 作为中间安装前缀时不支持并发。
-- `setup2.sh` 直接执行 `pip install meson`，在 PEP 668 或受管 Python 环境下会失败。
-- `setup2.sh` 可能往 `${OHOS_SDK}` 内写 symlink 或 stub 文件，这不利于并发、缓存和可恢复。
-- `builder.sh` 只串行处理传入的 `BUILD` 文件，不解析依赖，也不提供单包 worker 协议。
-- 父目录 Go 项目已能做依赖闭包和拓扑排序，但最后仍把所有 `BUILD` 一次性交给 `builder.sh` 串行构建。
-- `VERSION` / `VERSIONS` 只以旧文本格式保存有限信息，不保存完整 `BUILD` 路径和构建输入，不适合作为新构建系统的数据源，应以 JSON 包索引和 artifact manifest 替代。
-- 根目录 `patches/` 混放包私有 patch，无法精确判断缓存失效范围。
+- `.staging/<pkg_name>` 和共享 `dist.<cpu>` 中间安装前缀已不再作为新构建路径；如本地残留，只视为旧生成物。
+- Meson、ninja、crossenv 等 host 工具已进入 `.ohloha/host-venv/`；Python crossenv 运行目录已迁入 `.ohloha/crossenv/<sdk-api>/<cpu>/`。
+- `setup2.sh` 仍会在迁移期为 `${OHOS_SDK}` sysroot 中的 `libgcc_s.a` stub 写入加锁；后续目标是迁到 `.ohloha/sysroot-overlay/<sdk-api>/<cpu>/...`，彻底避免写 SDK。
+- `builder.sh` 已提供单包 worker 和缓存入口，但仍不负责解析依赖图；父目录 Go 项目负责依赖闭包、版本解析、DAG 和 `--resolved-deps`。
+- `VERSION` / `VERSIONS` 文本索引已废弃；当前以 `PKG_INDEX.json` 和 artifact manifest 为机器可读入口。
+- 根目录 `patches/` 不再作为包私有 patch 的推荐位置；新增/修改包应使用 `<pkg>/patches/<pkg_version>/` 和 `pkg_patch_files`。
 
 ## 里程碑 0：文档和边界确认
 
@@ -49,6 +47,7 @@
 - [x] 新增 `.ohloha/host-venv/` 作为仓库私有 host Python 环境。
 - [x] 把 `setup2.sh` 中的 `pip install meson` 改为通过 `.ohloha/host-venv/bin/python3 -m pip` 安装。
 - [x] 把 `crossenv` 安装也迁移到 host venv 或明确的私有工具环境。
+- [x] 把 Python crossenv 运行目录迁移到 `.ohloha/crossenv/<sdk-api>/<cpu>/`，不再使用仓库根 `crossenv_<cpu>`。
 - [x] 把 `meson`、`ninja`、`crossenv` 等 host 工具路径统一放入 `PATH` 前缀。
 - [x] 避免在 `${OHOS_SDK}/native/llvm/bin` 直接创建 `strip`、`profdata` symlink；改用 `.ohloha/tool-wrappers/<sdk-api>/<cpu>/bin`。
 - [x] 给 SDK sysroot 中 `libgcc_s.a` stub 的迁移期写入加 lock；后续仍需改为 `.ohloha/sysroot-overlay/<sdk-api>/<cpu>/...`，彻底避免写 SDK。
@@ -94,6 +93,7 @@
   locks/
   logs/
   host-venv/
+  crossenv/
   tool-wrappers/
   sysroot-overlay/
 ```
@@ -107,9 +107,10 @@
 - [x] `current_source_root` 指向 workdir 内源码副本。
 - [x] `sources_root` 指向 workdir 内 `src-root`，兼容现有 hook 中以 `${sources_root}` 为 patch 根的写法。
 - [x] `target_root_prefix_without_pkgname` 改为 workdir 内的临时安装前缀，不能再共享 `dist.<cpu>`。
-- [x] 成功后从 workdir 发布到 legacy `dist.<cpu>.<pkg>`；versioned dist 后续随多版本模型补齐。
+- [x] 成功后从 workdir 发布到 canonical `dist.<cpu>.<pkg>-<version>`；不再自动复制 legacy `dist.<cpu>.<pkg>` alias。
 - [x] 默认 CMake/Meson build dir 改为绝对 workdir 路径，避免固定污染源码树中的 `ohos-build`；自定义包手写 build dir 后续逐步迁移。
 - [x] Meson cross file 从模板生成到 `.ohloha/meson-cross/<api>/<cpu>/pid-<pid>/` 运行时副本，不再并发写 `meson-scripts/*.meson`；默认 Meson 构建继续复制到 workdir 后再注入包级 flags。
+- [x] Python crossenv 运行目录迁移到 `.ohloha/crossenv/<api>/<cpu>/`；`PY_CROSS_ROOT`、`HOST_SITE_PKGS` 等变量保持兼容，BUILD 不应硬编码旧 `crossenv_<cpu>`。
 
 验收：
 
@@ -128,9 +129,9 @@
 - [x] 构建成功后写入 `.ohloha/artifacts/<build-id>/manifest.json`、`payload.tar.zst`、`success`。
 - [x] cache hit 时恢复 artifact 到目标 `dist`，不执行 download、patch、configure、make、POSTINST。
 - [x] cache hit 前校验 manifest 和 payload 完整性。
-- [x] 构建失败不写 `success`，artifact 写入成功后才发布 legacy dist。
+- [x] 构建失败不写 `success`，artifact 写入成功后才发布 versioned dist。
 - [x] 新增调试选项：`--no-cache`、`--force-rebuild`、`--keep-failed-work`。
-- [x] `builder.sh --resolved-deps` 支持把已解析依赖 artifact id 写入缓存 key 和 manifest；父目录 Go 侧传入该文件仍待接入。
+- [x] `builder.sh --resolved-deps` 支持把已解析依赖 artifact id 写入缓存 key 和 manifest；父目录 Go 侧 worker 已在 `--build-one` 调用中传入该文件。
 
 fingerprint 至少包含：
 
@@ -188,7 +189,7 @@ boost/
 - [x] 在父目录 Go 项目中新增 `ohla xcompile --jobs <N>`。
 - [x] 把当前拓扑排序扩展为 ready queue + worker pool。
 - [x] 节点单位从包名逐步迁移为 `PackageID`。
-- [x] worker 调用 `builder.sh --build-one --cpu=<cpu> <BUILD_FILE>`。
+- [x] worker 调用 `builder.sh --build-one --cpu=<cpu> --resolved-deps=<file> <BUILD_FILE>`。
 - [x] 每个包日志写入 `.ohloha/logs/<pkg>-<version>-<arch>.log`。
 - [x] 终端输出只打印 concise 状态：running/cache-hit/success/failed/skipped。
 - [x] 节点失败后，将依赖它的后继节点标记为 skipped；`--keep-going` 允许继续构建尚未启动的无关分支。
@@ -205,7 +206,7 @@ boost/
 
 目标：同名包允许多个版本共存，依赖约束解析到具体版本。
 
-当前状态：已实现机器索引、`PackageID`、约束解析和 versioned dist 输出入口；`<pkg>/versions/<version>/BUILD` 就是计划中的额外版本目录结构。但当前仓库尚未为任何现有包保留一个可验证的额外版本目录并跑通索引、构建、部署链路，因此本里程碑不能视为完整验收完成。
+当前状态：已实现机器索引、`PackageID`、约束解析、versioned dist 输出入口和 `<pkg>/versions/<version>/BUILD` 额外版本目录结构。`python3-numpy` 已保留两个真实版本目录，并完成索引、解析和构建验证；部署链路的同名多版本额外验收见里程碑 8。
 
 任务：
 
@@ -218,16 +219,16 @@ boost/
 - [x] Go resolver 支持用户请求 `openssl`、`openssl==3.0.14`、`openssl>=3,<4` 这类约束语法。
 - [x] 依赖解析时选择满足约束的最高版本；冲突时输出明确诊断，错误信息需要保持多行可读。
 - [x] `get_pkg_dst_dir <name>` 根据 resolved-deps map 返回具体版本的 dist 路径。
-- [x] 真实输出目录使用 `dist.<cpu>.<name>-<version>`；`dist.<cpu>.<name>` 作为兼容 alias 或当前选择版本。
-- [ ] 为至少一个现有包迁移或新增额外版本目录，例如 `openssl/versions/<older-version>/BUILD`，用于验证同名多版本索引、解析、构建、部署链路。
-- [ ] 为多版本索引和额外版本目录补充端到端验证；不能只依赖单元测试或空目录约定。
+- [x] 真实输出目录使用 `dist.<cpu>.<name>-<version>`；不再自动发布 `dist.<cpu>.<name>` 兼容 alias。
+- [x] 为至少一个现有包迁移或新增额外版本目录，例如 `python3-numpy/versions/<version>/BUILD`，用于验证同名多版本索引、解析、构建、部署链路。
+- [x] 为多版本索引和额外版本目录补充端到端验证；不能只依赖单元测试或空目录约定。
 
-当前实现说明：同一次 xcompile 依赖闭包内，同名包只选择一个满足全部约束的版本；如果约束不可同时满足则报错。尚未实现同一闭包内并存两个同名不同版本的隔离安装模型。当前包目录仍以 `<pkg>/BUILD` 为主，不要把“代码入口可识别额外版本目录”表述为“仓库已经完成多版本包管理的端到端验收”。
+当前实现说明：同一次 xcompile 依赖闭包内，同名包只选择一个满足全部约束的版本；如果约束不可同时满足则报错。尚未实现同一闭包内并存两个同名不同版本的隔离安装模型。额外版本目录已用 `python3-numpy/versions/1.26.5/BUILD` 和 `python3-numpy/versions/2.3.1/BUILD` 完成索引、解析和构建验证。
 
 验收：
 
-- [ ] 同一仓库中存在至少一个包的两个真实版本 `BUILD`，且 `PKG_INDEX.json` 同时记录二者。
-- [ ] 用户请求精确版本和版本范围时能解析到预期版本，并能实际构建或明确报出版本冲突。
+- [x] 同一仓库中存在至少一个包的两个真实版本 `BUILD`，且 `PKG_INDEX.json` 同时记录二者。
+- [x] 用户请求精确版本和版本范围时能解析到预期版本，并能实际构建或明确报出版本冲突。
 - [x] 旧包 hook 中的 `get_pkg_dst_dir openssl` 不需要立即全量改写。
 
 ## 里程碑 8：部署和安装链路适配
@@ -266,9 +267,9 @@ boost/
 
 当前 legacy 边界：
 
-- 继续支持：`./builder.sh <BUILD>...` 串行入口、旧 hook 变量名、`dist.<cpu>.<pkg>` 兼容 alias。
+- 继续支持：`./builder.sh <BUILD>...` 串行入口、旧 hook 变量名。
 - 不再支持：`gen-versions.sh`、手工维护 `VERSION` / `VERSIONS`、依赖 `.staging/<pkg>` 或 `PATCHED_BY_OHLOHA` 判断源码状态。
-- 迁移期保留但不应扩展：`SRC_ROOT` 变量和旧 `dist.<cpu>.<pkg>` alias；新逻辑应使用 `.ohloha/` work/source/artifact 目录和 resolved dependency map。
+- 迁移期保留但不应扩展：`SRC_ROOT` 变量，以及本地残留的旧 `dist.<cpu>.<pkg>`、`crossenv_<cpu>` 目录；新逻辑应使用 `.ohloha/` work/source/artifact/crossenv 目录、`dist.<cpu>.<pkg>-<version>` 和 resolved dependency map。
 
 验收：
 

@@ -2,13 +2,14 @@
 py_ver = ''
 ohos_sdk = ''
 proj_root=''
+py_cross_root = ''
 toolchain = ohos_sdk / 'native/llvm/bin'
 sysroot = ohos_sdk / 'native/sysroot'
 host_cpu = ''
 host_arch = ''
 dist_root = proj_root/'dist.' + host_cpu
-hostpy_root = proj_root/'crossenv_' + host_cpu + '/cross'
-buildpy_root = proj_root/'crossenv_' + host_cpu + '/build'
+hostpy_root = py_cross_root / 'cross'
+buildpy_root = py_cross_root / 'build'
 common_flags = ['--sysroot=' + sysroot, '--target=' + host_cpu + '-linux-ohos']
 sitepkg = hostpy_root/'lib/python' + py_ver + '/site-packages'
 common_c_flags = ['-fPIC', '-D__MUSL__=1', '-I' + dist_root/'include', '-I' + dist_root/'include/python' + py_ver, '-I' + dist_root/'include/lzma', '-I' + dist_root/'include/ncursesw', '-I' + dist_root/'include/readline', '-I' + dist_root/'ssl/include', '-I' + sitepkg/'numpy/_core/include']
@@ -57,4 +58,3 @@ kernel = 'linux'
 cpu_family = host_cpu
 cpu = host_cpu
 endian = 'little'
-

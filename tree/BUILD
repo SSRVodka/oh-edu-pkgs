@@ -146,12 +146,12 @@ custom_build() {
 	make CC="${CC}" \
 		CFLAGS="${CFLAGS}" \
 		LDFLAGS="${LDFLAGS}" \
-		PREFIX=${TARGET_ROOT} \
+		PREFIX="${target_root_with_pkgname}" \
 		-j$(nproc) \
 		|| { popd; return 1; }
 
 	# install
-	make install PREFIX=${TARGET_ROOT} MANDIR=${TARGET_ROOT}/share/man/man1 \
+	make install PREFIX="${target_root_with_pkgname}" MANDIR="${target_root_with_pkgname}/share/man/man1" \
 		|| { popd; return 1; }
 
 	popd >/dev/null

@@ -119,7 +119,9 @@ prebuilt_patch_once_hook() {
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
 	# include special ncursesw headers
-	CFLAGS="$CFLAGS -I${target_root_prefix_without_pkgname}.libncursesw/include/ncursesw"
+	local ncurses_prefix
+	ncurses_prefix=$(get_pkg_dst_dir libncursesw) || return 1
+	CFLAGS="$CFLAGS -I${ncurses_prefix}/include/ncursesw"
 	# use new CFLAGS in normal build process
 	_custom_build_continue=true
 }

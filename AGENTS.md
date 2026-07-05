@@ -31,9 +31,9 @@
 
 - 重构必须按 `TODO.md` 的阶段边界推进，避免把 host 环境隔离、缓存、并发、多版本等大改混在一个不可验证的提交里。
 - 不得 overstate 已完成内容：代码入口、文档设计、单元测试、额外版本目录迁移、远端全量构建验证是不同完成层级，提交说明和最终回复必须区分。
-- 保持向后兼容：旧的 `BUILD` hook 变量、旧的 `./builder.sh <BUILD>...` 用法、旧的 `dist.<cpu>.<pkg>` 输出在迁移期不能无说明破坏。
+- 保持向后兼容：旧的 `BUILD` hook 变量、旧的 `./builder.sh <BUILD>...` 用法不能无说明破坏。`dist.<cpu>.<pkg>` legacy alias 已不再自动发布，相关行为变更必须在文档中明确说明。
 - 优先写可验证的小改动。每次修改根脚本后至少执行 `bash -n builder.sh setup2.sh`；修改包脚本后执行 `bash -n <pkg>/BUILD`。
-- 不允许把生成物、缓存、远端编译产物、`.ohloha/`、`.staging*`、`dist*`、`crossenv_*`、`deploy/`、`meson-scripts/*.meson` 纳入提交。
+- 不允许把生成物、缓存、远端编译产物、`.ohloha/`、`.staging*`、`dist*`、旧 `crossenv_*`、`deploy/`、`meson-scripts/*.meson` 纳入提交。
 - 对共享状态必须显式加锁或隔离；不要引入新的全局临时目录、全局 Meson 文件、全局安装前缀写入。
 - 对构建环境的修改要保守：不要无提示修改系统 Python 包，不要无必要写入 OHOS SDK 目录。
 - 代码应保持 Bash 严格模式兼容，变量引用尽量加引号，失败路径要返回明确错误；不要依赖 `$PWD`、隐式 `cd` 或跨包环境变量泄漏。
@@ -44,9 +44,10 @@
 
 - `.staging/`：旧源码缓存目录，当前构建流程不再把它作为源码状态来源；如本地残留，仅视为可删除的 legacy 生成物。
 - `.ohloha/native/sources/`、`.ohloha/native/dst/`：native/host 构建缓存和工具输出。`native_sources_root`、`native_dst_root` 变量短期保留给旧 hook 使用，但路径不再指向旧 `.staging.*`。
-- `dist.<cpu>.<pkg>`：legacy 单包目标输出目录，例如 `dist.aarch64.openssl`。当前构建先安装到 `.ohloha/work/<build-id>/install/` 下的临时前缀，成功后再发布到该 legacy 目录。
+- `dist.<cpu>.<pkg>`：旧单包目标输出目录，例如 `dist.aarch64.openssl`。新构建不再自动发布这个 legacy alias；如本地残留，仅视为可删除的旧生成物。需要别名时由调用方自行创建软链接。
+- `dist.<cpu>.<pkg>-<version>`：当前 canonical 单包输出目录，例如 `dist.aarch64.openssl-3.5.0`。同名多版本包必须依赖这个版本化目录或 resolved-deps map，避免互相覆盖。
 - `dist.<cpu>`：旧共享中间安装前缀；新默认 helper 不应继续把当前包安装到这里。
-- `dist.wheels/`、`crossenv_<cpu>/`、`deploy/`。
+- `dist.wheels/`、旧 `crossenv_<cpu>/`、`deploy/`：如本地残留，仅视为可删除的旧生成物；当前 crossenv 位于 `.ohloha/crossenv/<sdk-api>/<cpu>/`。
 - `.ohloha/meson-cross/`：由 `setup2.sh` 从 `meson-scripts/*.meson.template` 生成的运行时 Meson cross file 副本。`meson-scripts/` 下只维护模板，不应生成或提交可变 `.meson` 文件。
 - `PKG_INDEX.json`：用于替代 `VERSION` / `VERSIONS` 的机器可读包索引。它可以记录 `pkg/versions/<version>/BUILD` 额外版本入口；该目录结构就是多版本 BUILD 的承载方式。不要把“索引入口可识别额外版本目录”误写成“仓库已完成多版本端到端验收”。`VERSION` / `VERSIONS` 文本清单视为旧方案，不需要为新重构保持兼容。
 
@@ -65,6 +66,8 @@
 ```bash
 ./builder.sh foo/BUILD
 ```
+
+注意：单独构建依赖型包时，`builder.sh` 不会扫描已有 `dist.<cpu>.<dep>-<version>` 并自动选择依赖版本。依赖路径只来自 `--resolved-deps`、同一 builder 进程前面成功构建并记录的包，或当前 workdir 的临时安装目录。因此测试这类包时应按拓扑序传入依赖 BUILD，或显式传入 resolved dependency map。
 
 输出单包元数据或构建输入摘要：
 
@@ -128,7 +131,8 @@
 
 - 顶部使用 `#!/bin/bash` 和 `set -Eeuo pipefail`。
 - 不要删除、重命名或随意新增模板中的 `pkg_*` 配置变量。
-- `setup()` 内填写包元数据；hook 函数放在模板指定位置。
+- `setup()` 内填写包元数据和静态默认值；hook 函数放在模板指定位置。
+- 不要在 `setup()` 中做依赖路径或构建现场相关的动态计算，例如调用 `get_pkg_dst_dir`、读取 `HOST_PYTHON_DIST` / `NUMPY*_LIBROOT` / `target_root_*`，或把当前 `CFLAGS` / `LDFLAGS` 展开进 `pkg_build_*` flags。这些值必须在 `custom_build`、`post_configure_hook` 等 build 阶段 hook 中计算并赋值。
 - 保留 `LOAD_NATIVE_HOOK_ONLY` 保护块，`native_env_hook` 依赖它在加载 `setup2.sh` 前运行。
 
 关键字段约束：
@@ -226,6 +230,6 @@ fi
 
 提交前检查：
 
-- `git status --short`，确认没有把 `.staging*`、`dist*`、`crossenv_*`、`deploy/`、`meson-scripts/*.meson` 等生成物纳入提交。
+- `git status --short`，确认没有把 `.staging*`、`dist*`、旧 `crossenv_*`、`deploy/`、`meson-scripts/*.meson`、`.ohloha/` 等生成物纳入提交。
 - `bash -n <pkg>/BUILD` 和 `bash -n <pkg>/POSTINST` 可作为快速语法检查。
 - 不要回滚用户已有修改；遇到无关脏文件只记录并避开。

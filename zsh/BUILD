@@ -39,7 +39,7 @@ pkg_support_archs="x86_64,aarch64,arm"
 #  - you are responsible to set setup_pycrossenv if you set pkg_build_type == "meson", ensure meson, and use destroy_pycrossenv before finishing building this package.
 pkg_build_type="autotools"
 # [OPTIONAL]
-pkg_build_parallism="$(nproc)"
+pkg_build_parallism=""
 # [OPTIONAL: empty or Y]
 pkg_force_clean_build=""
 
@@ -145,6 +145,7 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
+	pkg_build_parallism="$(nproc)"
 	_custom_build_continue=true
 }
 

@@ -42,11 +42,11 @@ pkg_build_parallism=""
 
 ####### build type related (all OPTIONAL) #######
 
-pkg_build_autotools_extra_configure_flags="--enable-pythoninterp=yes --enable-python3interp=yes --with-python-command=python3 --with-python3-stable-abi=${PY_VERSION} --with-python3-config-dir=$(get_pkg_dst_dir python3)/${OHOS_LIBDIR}/python${PY_VERSION}/config-${PY_VERSION}-${OHOS_CPU}-linux-ohos --disable-gui --without-x --with-tlib=ncursesw"
+pkg_build_autotools_extra_configure_flags=""
 # fill in a relative path to the ${current_source_root} (defined below)
 pkg_build_autotools_bootstrap_script=""
 # NOTE: vim configure doesn't support --host/--target check
-pkg_build_autotools_suffix_configure_flags="--host=${OHOS_CPU}-linux-ohos --build=${BUILD_PLATFORM_TRIPLET} --target=${OHOS_CPU}-linux-ohos AR=${AR} NM=${NM} LD=${LD} LDXX=${LDXX} STRIP=${STRIP} RANLIB=${RANLIB} ac_cv_path_vi_cv_path_python3=python3 vi_cv_path_python3=python3 vi_cv_var_python3_version=${PY_VERSION} vi_cv_path_python3_pfx=$(get_pkg_dst_dir python3) vi_cv_path_python3_include=$(get_pkg_dst_dir python3)/include/python${PY_VERSION} vi_cv_path_python3_platinclude=$(get_pkg_dst_dir python3)/include/python${PY_VERSION} vi_cv_dll_name_python3=libpython${PY_VERSION}.so"
+pkg_build_autotools_suffix_configure_flags=""
 #pkg_build_autotools_suffix_configure_flags="--host=${OHOS_CPU}-linux-ohos --build=${BUILD_PLATFORM_TRIPLET} --target=${OHOS_CPU}-linux-ohos"
 pkg_build_autotools_configure_dir="vim/src"
 pkg_build_autotools_make_install_target=""
@@ -134,6 +134,10 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
+	local _python_prefix
+	_python_prefix="$(get_pkg_dst_dir python3)" || return 1
+	pkg_build_autotools_extra_configure_flags="--enable-pythoninterp=yes --enable-python3interp=yes --with-python-command=python3 --with-python3-stable-abi=${PY_VERSION} --with-python3-config-dir=${_python_prefix}/${OHOS_LIBDIR}/python${PY_VERSION}/config-${PY_VERSION}-${OHOS_CPU}-linux-ohos --disable-gui --without-x --with-tlib=ncursesw"
+	pkg_build_autotools_suffix_configure_flags="--host=${OHOS_CPU}-linux-ohos --build=${BUILD_PLATFORM_TRIPLET} --target=${OHOS_CPU}-linux-ohos AR=${AR} NM=${NM} LD=${LD} LDXX=${LDXX} STRIP=${STRIP} RANLIB=${RANLIB} ac_cv_path_vi_cv_path_python3=python3 vi_cv_path_python3=python3 vi_cv_var_python3_version=${PY_VERSION} vi_cv_path_python3_pfx=${_python_prefix} vi_cv_path_python3_include=${_python_prefix}/include/python${PY_VERSION} vi_cv_path_python3_platinclude=${_python_prefix}/include/python${PY_VERSION} vi_cv_dll_name_python3=libpython${PY_VERSION}.so"
 	export VIMRUNTIMEDIR=/sys_prod/robot/out/share/vim/vim91
 	# patch OHOS_SDK fortify
 	export CFLAGS="-nostdinc -isystem ${HOST_SYSROOT}/usr/include -isystem ${HOST_SYSROOT}/usr/include/${OHOS_CPU}-linux-ohos --target=${OHOS_CPU}-linux-ohos --sysroot=${HOST_SYSROOT} ${CFLAGS}"

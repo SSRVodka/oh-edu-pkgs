@@ -25,7 +25,7 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 
 ### 测试
 
-如果您想要测试该补丁框架能否正确编译，暂时不想使用 ohloha 管理，您可以使用本仓库的 `test-build-*.sh` 系列脚本。执行这些脚本（任意一个）后会开始按预设的顺序依次编译。例如 `test-build-opencv-and-deps.sh` 会按顺序编译 opencv 和所需的依赖库并输出到 `dist.<arch>.*`；
+如果您想要测试该补丁框架能否正确编译，暂时不想使用 ohloha 管理，您可以使用本仓库的 `test-build-*.sh` 系列脚本。执行这些脚本（任意一个）后会开始按预设的顺序依次编译。例如 `test-build-opencv-and-deps.sh` 会按顺序编译 opencv 和所需的依赖库并输出到 `dist.<arch>.<pkg>-<version>`；
 
 ### 添加 (向 OH 迁移) 新的库
 
@@ -39,11 +39,13 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 
 现在就成功创建了一个 foo 包，你需要按照 `foo/BUILD` 中的指示填写关键信息，包括版本、依赖、构建 hooks、以及 `foo/POSTINST` 安装时 hook 脚本。
 
-填写完成后执行 `./builder.sh foo/BUILD` 构建这个包。成功后会输出到 `dist.<arch>.foo` 目录下。
+填写完成后执行 `./builder.sh foo/BUILD` 构建这个包。成功后会输出到 `dist.<arch>.foo-<version>` 目录下。构建器不再自动创建 `dist.<arch>.foo` legacy alias；如外部脚本确实需要这个名字，可以自行创建软链接。
 
 注意，`builder.sh` 本身不会管理依赖图，`ohloha` [包管理器](https://gitcode.com/openharmony-robot/tools_ohloha) 会管理并生成指令调用 `builder.sh` 构建这些包。
 
-您在测试时可以按照依赖关系这样依次构建（按拓扑序方向从前到后）：`./builder.sh dep1/BUILD dep2/BUILD dep3/BUILD foo/BUILD`；
+您在测试时可以按照依赖关系这样依次构建（按拓扑序方向从前到后）：`./builder.sh dep1/BUILD dep2/BUILD dep3/BUILD foo/BUILD`。同一个 builder 进程会记住前面成功发布的版本化 dist 路径，后续包的 `get_pkg_dst_dir <dep>` 会使用这些路径。
+
+如果只单独执行 `./builder.sh foo/BUILD`，即使仓库里已经存在 `dist.<arch>.<dep>-<version>`，构建器也不会扫描已有 dist 并自动猜测依赖版本。需要单独构建依赖型包时，请使用 `--resolved-deps` 明确传入依赖路径，或仍按拓扑序把依赖 BUILD 一起传入。这是为了避免同名多版本包被隐式选错。
 
 > [!TIP]
 >
@@ -94,3 +96,7 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 ### 编译时注意事项
 
 如需配置编译目标架构，调用 `builder.sh` 时指定 `--cpu` 参数（可选 `aarch64/arm/x86_64`）即可，或者请参考注释修改 `setup2.sh` 的 `OHOS_CPU` 和 `OHOS_ARCH` 定义；
+
+编写 `BUILD` 时，`setup()` 应只填写静态元数据和不依赖构建现场的默认值。不要在 `setup()` 中调用 `get_pkg_dst_dir`，也不要读取 `HOST_PYTHON_DIST`、`NUMPY*_LIBROOT`、`target_root_*`、`CFLAGS/LDFLAGS` 等运行态变量来拼动态 flags。依赖路径、Python/numpy include/lib 路径、根据当前 arch/workdir 计算出的 CMake/autotools/meson flags，应放在 `custom_build`、`post_configure_hook` 等 build 阶段 hook 中设置。
+
+Python crossenv 运行目录由 `setup2.sh` 管理在 `.ohloha/crossenv/<sdk-api>/<cpu>/`。BUILD 中如需引用交叉 Python 环境，应使用 `PY_CROSS_ROOT`、`HOST_SITE_PKGS`、`PYPKG_OUTPUT_WHEEL_DIR` 等变量，不要硬编码旧的 `crossenv_<cpu>` 路径。

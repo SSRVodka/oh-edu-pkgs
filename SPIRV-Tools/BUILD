@@ -46,7 +46,7 @@ pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
 pkg_build_autotools_make_install_target=""
 
-pkg_build_cmake_extra_cmake_flags="-D BUILD_SHARED_LIBS=ON -D SPIRV_WERROR=OFF -D SPIRV-Headers_SOURCE_DIR=$(get_pkg_dst_dir SPIRV-Headers)"
+pkg_build_cmake_extra_cmake_flags=""
 pkg_build_cmake_extra_cmake_prefix_path=""
 pkg_build_cmake_extra_cflags=""
 # NOTE: C preprocessor not CXX
@@ -129,6 +129,9 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
+	local _spirv_headers_prefix
+	_spirv_headers_prefix="$(get_pkg_dst_dir SPIRV-Headers)" || return 1
+	pkg_build_cmake_extra_cmake_flags="-D BUILD_SHARED_LIBS=ON -D SPIRV_WERROR=OFF -D SPIRV-Headers_SOURCE_DIR=${_spirv_headers_prefix}"
 	_custom_build_continue=true
 }
 

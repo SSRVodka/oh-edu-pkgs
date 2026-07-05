@@ -24,13 +24,12 @@ get_pkg_dst_dir() {
     local name="${1:-}"
     local version="${2:-}"
     local versioned="${TARGET_ROOT}.${name}-${version}"
-    local legacy="${TARGET_ROOT}.${name}"
 
     if [ -n "$version" ] && [ -d "$versioned" ]; then
         printf '%s' "$versioned"
-    else
-        printf '%s' "$legacy"
+        return 0
     fi
+    return 1
 }
 
 python3 - "$PKG_INDEX_FILE" "${CUR_DIR}/.ohloha/artifacts" "${OHOS_CPU}" "${OHOS_SDK_API_VERSION}" <<'PY' | while IFS=$'\t' read -r name version deps build_file; do

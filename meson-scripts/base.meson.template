@@ -2,12 +2,13 @@
 py_ver = ''
 ohos_sdk = ''
 proj_root = '/home/xhw/Desktop/OH/oh-edu-python'
+py_cross_root = ''
 toolchain = ohos_sdk / 'native/llvm/bin'
 sysroot = ohos_sdk / 'native/sysroot'
 host_cpu = ''
 host_arch = ''
 dist_root = proj_root/'dist.' + host_cpu
-hostpy_root = proj_root/'crossenv_' + host_cpu + '/cross'
+hostpy_root = py_cross_root / 'cross'
 common_flags = ['--sysroot=' + sysroot, '--target=' + host_cpu + '-linux-ohos']
 common_c_flags = ['-fPIC', '-D__MUSL__=1', '-D__OPENHARMONY__', '-D__OHOS__']
 common_ld_flags = ['-fuse-ld=lld', '-L' + sysroot/'usr/lib/' + host_cpu + '-linux-ohos', '-L' + dist_root/'lib']
@@ -65,4 +66,3 @@ kernel = 'linux'
 cpu_family = host_cpu
 cpu = host_cpu
 endian = 'little'
-

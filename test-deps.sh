@@ -40,14 +40,14 @@ numpy2_and_deps=(
 "${openblas_and_deps[@]}"
 python3-cython
 python3-build
-python3-numpy2
+python3-numpy/versions/2.3.1
 )
 
 onnx_and_deps=(
 "${python_and_deps[@]}"
 python3-wheel
 python3-setuptools
-python3-numpy
+python3-numpy/versions/1.26.5
 onnxruntime
 )
 
@@ -76,7 +76,7 @@ all_deps=(
 "${binutils_and_deps[@]}"
 python3-cython
 python3-build
-python3-numpy2
+python3-numpy/versions/2.3.1
 python3-wheel
 python3-setuptools
 opencv
@@ -139,4 +139,3 @@ pcl
 bullet3
 qt5
 )
-

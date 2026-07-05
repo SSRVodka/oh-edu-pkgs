@@ -17,9 +17,9 @@ pkg_version="4.11.0"
 pkg_name="opencv"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
 # NOTE: python3>=3.9 use numpy>=2. See https://github.com/opencv/opencv-python/blob/4.x/pyproject.toml
-pkg_deps="python3>=3.9,python3-numpy2>=2,openblas,ffmpeg>=4"
+pkg_deps="python3>=3.9,python3-numpy>=2,openblas,ffmpeg>=4"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="python3>=3.9,python3-numpy2>=2,openblas,ffmpeg>=4"
+pkg_build_deps="python3>=3.9,python3-numpy>=2,openblas,ffmpeg>=4"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://github.com/opencv/opencv-python.git"
@@ -44,12 +44,12 @@ pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
 pkg_build_autotools_make_install_target=""
 
-pkg_build_cmake_extra_cmake_flags="-S opencv -DCMAKE_FIND_ROOT_PATH=${HOST_PYTHON_DIST} -DPYTHON_INCLUDE_DIRS=${HOST_PYTHON_DIST}/include -DPYTHON3_INCLUDE_PATH=${HOST_PYTHON_DIST}/include/python${PY_VERSION} -DPYTHON3_LIBRARIES=${HOST_PYTHON_DIST}/${OHOS_LIBDIR}/libpython${PY_VERSION}.so -DPYTHON3_NUMPY_INCLUDE_DIRS=${NUMPY2_LIBROOT}/include"
+pkg_build_cmake_extra_cmake_flags="-S opencv"
 pkg_build_cmake_extra_cmake_prefix_path=""
-pkg_build_cmake_extra_cflags="$CFLAGS"
+pkg_build_cmake_extra_cflags=""
 # NOTE: C preprocessor not CXX
 pkg_build_cmake_extra_cppflags="-D__MUSL__ -D__OPENHARMONY__ -D__OHOS__"
-pkg_build_cmake_extra_ldflags="$LDFLAGS"
+pkg_build_cmake_extra_ldflags=""
 pkg_build_cmake_extra_cmake_findroot_path=""
 
 # fill in a relative path to this script
@@ -101,12 +101,13 @@ native_env_hook() {
 # 	if you set _custom_download_source_continue="false" caz default build process will use
 custom_download_source() {
 	
-	mkdir -p ${current_source_root}
-	git clone $pkg_source_url ${current_source_root}
-	pushd ${current_source_root}
-	git switch 4.x
-	git submodule sync && git submodule update --init --recursive
-	popd
+	rm -rf "${current_source_root}"
+	git clone "$pkg_source_url" "${current_source_root}" || return 1
+	pushd "${current_source_root}" || return 1
+	git switch 4.x || { popd; return 1; }
+	git submodule sync || { popd; return 1; }
+	git submodule update --init --recursive || { popd; return 1; }
+	popd || return 1
 
 	_custom_download_source_continue=false
 }
@@ -135,14 +136,18 @@ prebuilt_patch_once_hook() {
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
 	# make opencv's cmake happy
-	mkdir -p ${target_root_prefix_without_pkgname}/include
+	mkdir -p "${target_root_prefix_without_pkgname}/include" || return 1
+	setup_pycrossenv || return 1
+	pkg_build_cmake_extra_cmake_flags="-S opencv -DCMAKE_FIND_ROOT_PATH=${HOST_PYTHON_DIST} -DPYTHON_INCLUDE_DIRS=${HOST_PYTHON_DIST}/include -DPYTHON3_INCLUDE_PATH=${HOST_PYTHON_DIST}/include/python${PY_VERSION} -DPYTHON3_LIBRARIES=${HOST_PYTHON_DIST}/${OHOS_LIBDIR}/libpython${PY_VERSION}.so -DPYTHON3_NUMPY_INCLUDE_DIRS=${NUMPY2_LIBROOT}/include"
+	pkg_build_cmake_extra_cflags="$CFLAGS"
+	pkg_build_cmake_extra_ldflags="$LDFLAGS"
 	# continue to normal build process
 	_custom_build_continue=true
 }
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	:
+	destroy_pycrossenv || true
 }
 
 ################ self-defined functions (local) goes below ################

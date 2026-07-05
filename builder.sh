@@ -29,6 +29,7 @@ resolved_deps_file=""
 # Internal retry code used when source preparation changes the final build id.
 build_lock_retry_rc=75
 pycrossenv_lock_dir=""
+declare -A built_pkg_dst_by_name=()
 
 native_project_root=$(dirname "$(readlink -f "$0")")
 ohloha_root=${native_project_root}/.ohloha
@@ -79,11 +80,6 @@ get_native_src_root() {
     printf '%s/%s' "${native_sources_root}" "${1:-}"
 }
 
-# Get the build output directory (in staging area) of the specific package
-get_pkg_legacy_dst_dir() {
-    printf '%s.%s' "${TARGET_ROOT}" "${1:-}"
-}
-
 get_pkg_versioned_dst_dir() {
     local name="${1:-}"
     local version="${2:-${pkg_version:-}}"
@@ -91,6 +87,17 @@ get_pkg_versioned_dst_dir() {
     [ -n "$name" ] || return 1
     [ -n "$version" ] || return 1
     printf '%s.%s-%s' "${TARGET_ROOT}" "$name" "$version"
+}
+
+remember_built_pkg_dst_dir() {
+    local name="${1:-}"
+    local version="${2:-${pkg_version:-}}"
+    local dst
+
+    [ -n "$name" ] || return 1
+    [ -n "$version" ] || return 1
+    dst=$(get_pkg_versioned_dst_dir "$name" "$version") || return 1
+    built_pkg_dst_by_name["$name"]="$dst"
 }
 
 get_resolved_pkg_dst_dir() {
@@ -147,6 +154,7 @@ get_pkg_dst_dir() {
     local name="${1:-}"
     local work_dst=""
     local resolved_dst=""
+    local remembered_dst=""
 
     if resolved_dst=$(get_resolved_pkg_dst_dir "$name" 2>/dev/null); then
         if [ -n "$resolved_dst" ]; then
@@ -163,7 +171,26 @@ get_pkg_dst_dir() {
         fi
     fi
 
-    get_pkg_legacy_dst_dir "$name"
+    remembered_dst="${built_pkg_dst_by_name[$name]:-}"
+    if [ -n "$remembered_dst" ] && [ -d "$remembered_dst" ]; then
+        printf '%s' "$remembered_dst"
+        return 0
+    fi
+
+    error "no resolved versioned dist path for package '$name'; use resolved-deps or build the dependency earlier in this builder process"
+    return 1
+}
+
+refresh_python_dependency_env() {
+    local python_prefix
+
+    if python_prefix=$(get_pkg_dst_dir python3 2>/dev/null); then
+        export HOST_PYTHON_DIST="$python_prefix"
+        export HOST_PYTHON_BIN="${HOST_PYTHON_DIST}/bin"
+        export HOST_PYTHON="${HOST_PYTHON_BIN}/python3"
+        export HOST_PIP="${HOST_PYTHON_BIN}/pip3"
+        export HOST_MESON="${HOST_PYTHON_BIN}/meson"
+    fi
 }
 
 get_pkg_install_dir() {
@@ -171,7 +198,7 @@ get_pkg_install_dir() {
     if [ -n "${target_root_prefix_without_pkgname:-}" ]; then
         printf '%s.%s' "${target_root_prefix_without_pkgname}" "$name"
     else
-        get_pkg_legacy_dst_dir "$name"
+        get_pkg_versioned_dst_dir "$name"
     fi
 }
 
@@ -226,17 +253,17 @@ patch_pkg_dir_for_prefix() {
     done
 }
 
-prepare_pkg_for_legacy_dst() {
+prepare_pkg_payload() {
     local _pkg_name="${1:-${pkg_name:-}}"
     local _pkg_src="${2:-${target_root_with_pkgname:-}}"
     local _pkg_dst="${3:-}"
     local _final_prefix="${4:-}"
 
-    [ -n "$_pkg_name" ] || { error "prepare_pkg_for_legacy_dst: empty package name"; return 1; }
-    [ -n "$_pkg_src" ] || { error "prepare_pkg_for_legacy_dst: empty source path"; return 1; }
-    [ -n "$_pkg_dst" ] || { error "prepare_pkg_for_legacy_dst: empty destination path"; return 1; }
+    [ -n "$_pkg_name" ] || { error "prepare_pkg_payload: empty package name"; return 1; }
+    [ -n "$_pkg_src" ] || { error "prepare_pkg_payload: empty source path"; return 1; }
+    [ -n "$_pkg_dst" ] || { error "prepare_pkg_payload: empty destination path"; return 1; }
     if [ ! -d "$_pkg_src" ]; then
-        error "prepare_pkg_for_legacy_dst: source directory not found: '$_pkg_src'"
+        error "prepare_pkg_payload: source directory not found: '$_pkg_src'"
         return 1
     fi
 
@@ -258,30 +285,6 @@ prepare_pkg_for_legacy_dst() {
     if [ -d "${_pkg_dst}/share" ]; then
         patch_pkg_dir_for_prefix "$_pkg_name" "$_pkg_dst" "$_final_prefix" "${_pkg_dst}/share" "${_final_prefix}/share"
     fi
-}
-
-publish_prepared_pkg_to_legacy_dst() {
-    local _pkg_name="${1:-${pkg_name:-}}"
-    local _pkg_src="${2:-}"
-    local _pkg_dst _tmp_dst
-
-    [ -n "$_pkg_name" ] || { error "publish_prepared_pkg_to_legacy_dst: empty package name"; return 1; }
-    [ -n "$_pkg_src" ] || { error "publish_prepared_pkg_to_legacy_dst: empty source path"; return 1; }
-    if [ ! -d "$_pkg_src" ]; then
-        error "publish_prepared_pkg_to_legacy_dst: source directory not found: '$_pkg_src'"
-        return 1
-    fi
-
-    _pkg_dst=$(get_pkg_legacy_dst_dir "$_pkg_name")
-    if [ "$(readlink -f "$_pkg_src")" = "$(readlink -m "$_pkg_dst")" ]; then
-        return 0
-    fi
-
-    _tmp_dst="${_pkg_dst}.tmp.$$"
-    rm -rf "$_tmp_dst"
-    cp -a "$_pkg_src" "$_tmp_dst"
-    rm -rf "$_pkg_dst"
-    mv "$_tmp_dst" "$_pkg_dst"
 }
 
 publish_prepared_pkg_to_versioned_dst() {
@@ -316,30 +319,7 @@ publish_prepared_pkg_to_dist_dirs() {
     local _pkg_src="${3:-}"
 
     publish_prepared_pkg_to_versioned_dst "$_pkg_name" "$_pkg_version" "$_pkg_src" || return 1
-    publish_prepared_pkg_to_legacy_dst "$_pkg_name" "$_pkg_src" || return 1
-}
-
-publish_pkg_to_legacy_dst() {
-    local _pkg_name="${1:-${pkg_name:-}}"
-    local _pkg_src="${2:-${target_root_with_pkgname:-}}"
-    local _pkg_dst _tmp_dst
-
-    [ -n "$_pkg_name" ] || { error "publish_pkg_to_legacy_dst: empty package name"; return 1; }
-    [ -n "$_pkg_src" ] || { error "publish_pkg_to_legacy_dst: empty source path"; return 1; }
-    if [ ! -d "$_pkg_src" ]; then
-        error "publish_pkg_to_legacy_dst: source directory not found: '$_pkg_src'"
-        return 1
-    fi
-
-    _pkg_dst=$(get_pkg_legacy_dst_dir "$_pkg_name")
-    _tmp_dst="${_pkg_dst}.tmp.$$"
-    rm -rf "$_tmp_dst"
-    prepare_pkg_for_legacy_dst "$_pkg_name" "$_pkg_src" "$_tmp_dst" || {
-        rm -rf "$_tmp_dst"
-        return 1
-    }
-    rm -rf "$_pkg_dst"
-    mv "$_tmp_dst" "$_pkg_dst"
+    remember_built_pkg_dst_dir "$_pkg_name" "$_pkg_version" || return 1
 }
 
 # Variable definitions
@@ -388,6 +368,8 @@ set_arch_env_from_cpu() {
 }
 
 setup_metadata_defaults() {
+    # Keep this lightweight: metadata/cache-key paths may run before setup2.sh is
+    # sourced, while setup2.sh owns the real build environment and host tools.
     export OHOS_SDK="${OHOS_SDK:-}"
     OHOS_SDK_API_VERSION="${OHOS_SDK_API_VERSION:-}"
     if [ -z "${OHOS_CPU:-}" ]; then
@@ -405,7 +387,7 @@ setup_metadata_defaults() {
     BUILD_PLATFORM_TRIPLET="${BUILD_PLATFORM_TRIPLET:-x86_64-pc-linux-gnu}"
     HOST_SYSROOT="${HOST_SYSROOT:-${OHOS_SDK:-}/native/sysroot}"
     HOST_LIBC="${HOST_LIBC:-${HOST_SYSROOT}/usr/lib/${OHOS_CPU}-linux-ohos/libc.so}"
-    HOST_PYTHON_DIST="${HOST_PYTHON_DIST:-${TARGET_ROOT}.python3}"
+    HOST_PYTHON_DIST="${HOST_PYTHON_DIST:-}"
     NUMPY_LIBROOT="${NUMPY_LIBROOT:-}"
     NUMPY2_LIBROOT="${NUMPY2_LIBROOT:-}"
     BUILD_PYTHON="${BUILD_PYTHON:-python3}"
@@ -1110,7 +1092,7 @@ restore_artifact_cache_unlocked() {
         rm -rf "$tmp_dst"
         return 1
     fi
-    publish_prepared_pkg_to_legacy_dst "$pkg" "$canonical_dst" || return 1
+    remember_built_pkg_dst_dir "$pkg" "$version" || return 1
     info "cache hit: ${path_component}"
 }
 
@@ -1742,6 +1724,12 @@ wget_source() {
 }
 
 setup_pycrossenv() {
+    refresh_python_dependency_env
+    if [ -z "${HOST_PYTHON_DIST:-}" ] || [ ! -d "${HOST_PYTHON_DIST:-}" ]; then
+        error "python3 dependency dist not found; build python3 first or pass resolved-deps"
+        return 1
+    fi
+
     local buildpy_libdir="${BUILD_PYTHON_DIST}/lib"
     if [[ ":${LD_LIBRARY_PATH:-}:" != *":${buildpy_libdir}:"* ]]; then
         export LD_LIBRARY_PATH=${buildpy_libdir}:$LD_LIBRARY_PATH
@@ -1776,7 +1764,7 @@ setup_pycrossenv() {
     fi
     acquire_ohloha_lock "pycrossenv-${OHOS_CPU}" pycrossenv_lock_dir || return 1
 
-    # this will modify envs like PATH, _PS and use shared crossenv_${OHOS_CPU}
+    # this modifies envs like PATH and _PS and uses the shared per-arch pycrossenv.
     enter_pycrossenv || {
         release_pycrossenv_lock
         return 1
@@ -2034,8 +2022,8 @@ build_package_locked() {
 
     local publish_payload_dir
     publish_payload_dir="${current_work_root}/publish/dist.${OHOS_CPU}.${pkg_name}-${pkg_version}"
-    prepare_pkg_for_legacy_dst "$pkg_name" "$target_root_with_pkgname" "$publish_payload_dir" "$(get_pkg_versioned_dst_dir "$pkg_name" "$pkg_version")" || {
-        fail_build_package "prepare_pkg_for_legacy_dst for '$build_file' failed"
+    prepare_pkg_payload "$pkg_name" "$target_root_with_pkgname" "$publish_payload_dir" "$(get_pkg_versioned_dst_dir "$pkg_name" "$pkg_version")" || {
+        fail_build_package "prepare_pkg_payload for '$build_file' failed"
         return 1
     }
 
@@ -2086,6 +2074,7 @@ build_package() {
     current_work_root=""
 
     source "$build_file"
+    refresh_python_dependency_env
     setup || { fail_build_package "setup() failed"; return 1; }
     validate_config || { fail_build_package ""; return 1; }
 

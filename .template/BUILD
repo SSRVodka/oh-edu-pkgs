@@ -10,6 +10,12 @@ set -Eeuo pipefail
 setup() {
 
 # TODO: please fill in the variables for this package
+#
+# Keep setup() metadata-only. Do not resolve dependency paths or expand
+# build-time environment here. For example, do not call get_pkg_dst_dir and do
+# not read HOST_PYTHON_DIST, NUMPY*_LIBROOT, target_root_*, CFLAGS or LDFLAGS
+# while assigning pkg_build_* flags. Compute those dynamic flags in
+# custom_build/post_configure_hook instead.
 
 # [REQUIRED, NON-EMPTY, SEMVER]
 pkg_version=""
@@ -89,6 +95,7 @@ pkg_build_meson_extra_cmake_findroot_path=""
 #  - ${native_sources_root}: root for native sources (staging area)
 #  - cross-compiling variables (reset for each package): CC, CXX, AR, CFLAGS, PKG_CONFIG_*, ...
 #  - global configurations: OHOS_ARCH, OHOS_CPU, OHOS_LIBDIR, PATCH_FILE_ROOT, MESON_CROSS_ROOT, HOST_SYSROOT, ... (see setup.sh)
+#  - Python crossenv paths: PY_CROSS_ROOT, HOST_SITE_PKGS, PYPKG_OUTPUT_WHEEL_DIR; do not hardcode crossenv_<cpu>
 # Available local variables (except for native_env_hook):
 #  - ${current_source_url}: user configured `pkg_source_url` above (in `setup()`)
 #  - ${current}: the location (directory) of this script

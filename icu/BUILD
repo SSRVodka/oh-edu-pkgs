@@ -39,7 +39,7 @@ pkg_build_parallism=""
 
 ####### build type related (all OPTIONAL) #######
 
-pkg_build_autotools_extra_configure_flags="--with-cross-build=$(get_native_src_root $pkg_name)/source/native-build"
+pkg_build_autotools_extra_configure_flags=""
 # fill in a relative path to the ${current_source_root} (defined below)
 pkg_build_autotools_bootstrap_script=""
 pkg_build_autotools_suffix_configure_flags=""
@@ -162,6 +162,7 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
+	pkg_build_autotools_extra_configure_flags="--with-cross-build=$(get_native_src_root "$pkg_name")/source/native-build"
 	_custom_build_continue=true
 }
 

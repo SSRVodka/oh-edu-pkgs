@@ -12,13 +12,13 @@ setup() {
 # TODO: please fill in the variables for this package
 
 # [REQUIRED, NON-EMPTY, SEMVER]
-pkg_version="1.26.5"
+pkg_version="2.3.1"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
 pkg_name="python3-numpy"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps="openblas,python3>=3.8"
+pkg_deps="openblas,python3>=3.9"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="openblas,python3>=3.8,python3-cython,python3-build"
+pkg_build_deps="openblas,python3>=3.9,python3-cython,python3-build"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://github.com/numpy/numpy.git"
@@ -100,12 +100,12 @@ native_env_hook() {
 # 	if you set _custom_download_source_continue="false" caz default build process will use
 custom_download_source() {
 	
-	mkdir -p ${current_source_root}
-	git clone $pkg_source_url ${current_source_root}
-	pushd ${current_source_root}
-	git checkout v$pkg_version
-	git submodule update --init --recursive
-	popd
+	rm -rf "${current_source_root}"
+	git clone "$pkg_source_url" "${current_source_root}" || return 1
+	pushd "${current_source_root}" || return 1
+	git checkout "v$pkg_version" || { popd; return 1; }
+	git submodule update --init --recursive || { popd; return 1; }
+	popd || return 1
 
 	# use our own download process
 	_custom_download_source_continue=false
@@ -135,9 +135,10 @@ prebuilt_patch_once_hook() {
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
 	
-	setup_pycrossenv
+	setup_pycrossenv || return 1
 
-	local np_deps=$(get_pkg_names_from_deps $pkg_deps)
+	local np_deps
+	np_deps=$(get_pkg_names_from_deps "$pkg_deps")
 	local np_dep
 	for np_dep in $np_deps; do
 		CFLAGS="-I$(get_pkg_dst_dir $np_dep)/include ${CFLAGS}"
@@ -150,17 +151,17 @@ custom_build() {
 	set_meson_list $meson_cross "common_c_flags" "$CFLAGS"
 	set_meson_list $meson_cross "common_ld_flags" "$LDFLAGS"
 
-	pushd ${current_source_root}
-	rm -rf ./dist
-	python -m build --wheel -Csetup-args="--cross-file=${meson_cross}"
-	pip install -v ./dist/*-cp${PY_VERSION_CODE}-cp${PY_VERSION_CODE}-linux_${OHOS_CPU}.whl
+	pushd "${current_source_root}" || { destroy_pycrossenv || true; return 1; }
+	rm -rf ./dist || { popd; destroy_pycrossenv || true; return 1; }
+	python -m build --wheel -Csetup-args="--cross-file=${meson_cross}" || { popd; destroy_pycrossenv || true; return 1; }
+	pip install -v ./dist/*-cp${PY_VERSION_CODE}-cp${PY_VERSION_CODE}-linux_${OHOS_CPU}.whl || { popd; destroy_pycrossenv || true; return 1; }
 	
 	# copy wheel to destination for wheel distribution
-	cp ./dist/* ${PYPKG_OUTPUT_WHEEL_DIR}
+	cp ./dist/* "${PYPKG_OUTPUT_WHEEL_DIR}" || { popd; destroy_pycrossenv || true; return 1; }
 
-	popd
+	popd || { destroy_pycrossenv || true; return 1; }
 
-	destroy_pycrossenv
+	destroy_pycrossenv || return 1
 	
 	_custom_build_continue=false
 }
@@ -169,12 +170,12 @@ custom_build() {
 postbuilt_hook() {
 	local out=${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages
 	local out_bin=${target_root_with_pkgname}/bin
-	mkdir -p ${out} ${out_bin}
+	mkdir -p "${out}" "${out_bin}" || return 1
 	# copy libs
-	cp -r ${HOST_SITE_PKGS}/numpy* ${out}/
+	cp -r ${HOST_SITE_PKGS}/numpy* "${out}/" || return 1
 	# copy binary script
-	cp ${PY_CROSS_ROOT}/cross/bin/f2py ${out_bin}
-	sed -i "s|${PY_CROSS_ROOT}/cross/bin/||" ${out_bin}/f2py
+	cp "${PY_CROSS_ROOT}/cross/bin/f2py" "${out_bin}" || return 1
+	sed -i "s|${PY_CROSS_ROOT}/cross/bin/||" "${out_bin}/f2py" || return 1
 }
 
 ################ self-defined functions (local) goes below ################

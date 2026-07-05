@@ -3,7 +3,7 @@
 . setup.sh
 
 NATIVE_LLVM_CONFIG=${CUR_DIR}/llvm/native-build/bin/llvm-config
-TARGET_LLVM_PREFIX=${TARGET_ROOT}.llvm
+TARGET_LLVM_PREFIX=${TARGET_LLVM_PREFIX:-${TARGET_ROOT}.llvm-21.1.4}
 
 for arg in "$@"; do
     case "$arg" in
@@ -60,5 +60,4 @@ for arg in "$@"; do
             ;;
     esac
 done
-
 

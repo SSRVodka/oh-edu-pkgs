@@ -16,9 +16,9 @@ pkg_version="3.25"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
 pkg_name="bullet3"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps="glu>=9.0,mesa>=25.0,xorg,python3>3.9,python3-numpy2==2.3.1"
+pkg_deps="glu>=9.0,mesa>=25.0,xorg,python3>3.9,python3-numpy==2.3.1"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="glu>=9.0,mesa>=25.0,xorg,python3>3.9,python3-numpy2==2.3.1,openblas,python3-build,python3-wheel,python3-setuptools"
+pkg_build_deps="glu>=9.0,mesa>=25.0,xorg,python3>3.9,python3-numpy==2.3.1,openblas,python3-build,python3-wheel,python3-setuptools"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://github.com/bulletphysics/bullet3/archive/refs/tags/3.25.zip"
@@ -46,7 +46,7 @@ pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
 pkg_build_autotools_make_install_target=""
 
-pkg_build_cmake_extra_cmake_flags="-DBUILD_PYBULLET=ON -DBUILD_PYBULLET_NUMPY=ON -DUSE_DOUBLE_PRECISION=ON -DBT_USE_EGL=ON -DPYTHON_INCLUDE_DIR=$(get_pkg_dst_dir python3)/include/python${PY_VERSION} -DPYTHON_LIBRARY=$(get_pkg_dst_dir python3)/${OHOS_LIBDIR}/libpython3.so -DPYTHON_NUMPY_INCLUDE_DIR=${NUMPY2_LIBROOT}/include -DPYTHON_NUMPY_VERSION=2.3.1"
+pkg_build_cmake_extra_cmake_flags=""
 pkg_build_cmake_extra_cmake_prefix_path=""
 pkg_build_cmake_extra_cflags=""
 # NOTE: C preprocessor not CXX
@@ -152,9 +152,12 @@ custom_build() {
 		_bullet_extflag="-DLIB_SUFFIX=/${_bullet_libsuffix}"
 	fi
 
-	setup_pycrossenv
+	setup_pycrossenv || return 1
+	local _python_prefix
+	_python_prefix="$(get_pkg_dst_dir python3)" || { destroy_pycrossenv || true; return 1; }
+	pkg_build_cmake_extra_cmake_flags="-DBUILD_PYBULLET=ON -DBUILD_PYBULLET_NUMPY=ON -DUSE_DOUBLE_PRECISION=ON -DBT_USE_EGL=ON -DPYTHON_INCLUDE_DIR=${_python_prefix}/include/python${PY_VERSION} -DPYTHON_LIBRARY=${_python_prefix}/${OHOS_LIBDIR}/libpython3.so -DPYTHON_NUMPY_INCLUDE_DIR=${NUMPY2_LIBROOT}/include -DPYTHON_NUMPY_VERSION=2.3.1"
 
-	pushd ${sources_root}
+	pushd "${sources_root}"
 
 	build_cmakeproj_with_deps "$pkg_name" "$(get_pkg_names_from_deps $pkg_build_deps)" \
 		"${_bullet_extflag} $pkg_build_cmake_extra_cmake_flags" \
@@ -169,7 +172,7 @@ custom_build() {
 
 	popd
 
-	destroy_pycrossenv
+	destroy_pycrossenv || return 1
 
 	# use generated cmake flags
 	_custom_build_continue=false

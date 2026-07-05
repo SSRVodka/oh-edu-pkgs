@@ -648,15 +648,32 @@ BUILD_PYTHON_BIN="${BUILD_PYTHON_DIST}/bin"
 BUILD_PYTHON=$BUILD_PYTHON_BIN/python3
 BUILD_PIP=$BUILD_PYTHON_BIN/pip3
 
-HOST_PYTHON_DIST=${TARGET_ROOT}.python3
-HOST_PYTHON_BIN="${HOST_PYTHON_DIST}/bin"
-HOST_PYTHON=$HOST_PYTHON_BIN/python3
-HOST_PIP=$HOST_PYTHON_BIN/pip3
-HOST_MESON=$HOST_PYTHON_BIN/meson
+HOST_PYTHON_DIST="${HOST_PYTHON_DIST:-}"
+if [ -n "$HOST_PYTHON_DIST" ]; then
+	HOST_PYTHON_BIN="${HOST_PYTHON_DIST}/bin"
+	HOST_PYTHON=$HOST_PYTHON_BIN/python3
+	HOST_PIP=$HOST_PYTHON_BIN/pip3
+	HOST_MESON=$HOST_PYTHON_BIN/meson
+else
+	HOST_PYTHON_BIN=""
+	HOST_PYTHON=""
+	HOST_PIP=""
+	HOST_MESON=""
+fi
 
 MESON_CROSS_TEMPLATE_ROOT=${CUR_DIR}/meson-scripts
 MESON_CROSS_ROOT=${OHLOHA_ROOT}/meson-cross/${OHOS_SDK_API_VERSION}/${OHOS_CPU}/pid-$$
 MESON_CROSS_FILE_BASE=${MESON_CROSS_ROOT}/base.meson
+
+PY_CROSS_ROOT=${OHLOHA_ROOT}/crossenv/${OHOS_SDK_API_VERSION}/${OHOS_CPU}
+CROSS_ROOT=$PY_CROSS_ROOT
+HOST_SITE_PKGS=${PY_CROSS_ROOT}/cross/lib/python${PY_VERSION}/site-packages
+
+PYPKG_OUTPUT_WHEEL_DIR=${CUR_DIR}/dist.wheels
+
+# numpy >= 2 use different header location
+NUMPY_LIBROOT=${HOST_SITE_PKGS}/numpy/core
+NUMPY2_LIBROOT=${HOST_SITE_PKGS}/numpy/_core
 
 # modify ARCH in meson config
 update_config() {
@@ -664,6 +681,7 @@ update_config() {
     sed -i "s/py_ver[[:space:]]*=[[:space:]]*'.*'/py_ver = '${PY_VERSION}'/g" "$filename"
     sed -i "s|ohos_sdk[[:space:]]*=[[:space:]]*'.*'|ohos_sdk = '${OHOS_SDK}'|g" "$filename"
     sed -i "s|proj_root[[:space:]]*=[[:space:]]*'.*'|proj_root = '${CUR_DIR}'|g" "$filename"
+    sed -i "s|py_cross_root[[:space:]]*=[[:space:]]*'.*'|py_cross_root = '${PY_CROSS_ROOT}'|g" "$filename"
     sed -i -e "s/host_cpu[[:space:]]*=[[:space:]]*'.*'/host_cpu = '${OHOS_CPU}'/g" \
            -e "s/host_arch[[:space:]]*=[[:space:]]*'.*'/host_arch = '${OHOS_ARCH}'/g" "$filename"
 }
@@ -784,17 +802,20 @@ generate_meson_cross_files() {
 }
 
 enter_pycrossenv() {
-	if [[ ! -d ${PY_CROSS_ROOT} ]]; then
-		$BUILD_PIP install --disable-pip-version-check crossenv
-		$BUILD_PYTHON -m crossenv \
-			$HOST_PYTHON \
-			${CROSS_ROOT}
+	if [[ ! -f ${CROSS_ROOT}/bin/activate ]]; then
+		rm -rf "${PY_CROSS_ROOT}"
+		mkdir -p "$(dirname "${PY_CROSS_ROOT}")"
+		"$BUILD_PYTHON" -m pip install --disable-pip-version-check crossenv || return 1
+		if ! "$BUILD_PYTHON" -m crossenv "$HOST_PYTHON" "${CROSS_ROOT}"; then
+			[ -f "${BUILD_PYTHON_BIN}/crossenv" ] || return 1
+			"$BUILD_PYTHON" "${BUILD_PYTHON_BIN}/crossenv" "$HOST_PYTHON" "${CROSS_ROOT}" || return 1
+		fi
 	fi
-	. ${CROSS_ROOT}/bin/activate
+	. "${CROSS_ROOT}/bin/activate" || return 1
 }
 
 exit_pycrossenv() {
-	deactivate
+	deactivate || return 1
 }
 
 # Centralized Rust/PyO3/cc-rs cross-compilation setup.
@@ -844,16 +865,4 @@ setup_rust_cross_compile() {
 }
 
 generate_meson_cross_files
-
-
-PY_CROSS_ROOT=${CUR_DIR}/crossenv_${OHOS_CPU}
-CROSS_ROOT=$PY_CROSS_ROOT
-HOST_SITE_PKGS=${PY_CROSS_ROOT}/cross/lib/python${PY_VERSION}/site-packages
-
-PYPKG_OUTPUT_WHEEL_DIR=${CUR_DIR}/dist.wheels
-
-# numpy >= 2 use different header location
-NUMPY_LIBROOT=${HOST_SITE_PKGS}/numpy/core
-NUMPY2_LIBROOT=${HOST_SITE_PKGS}/numpy/_core
-
-mkdir -p ${PYPKG_OUTPUT_WHEEL_DIR}
+mkdir -p "${PYPKG_OUTPUT_WHEEL_DIR}"

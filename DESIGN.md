@@ -80,6 +80,10 @@
   locks/
   logs/
   host-venv/
+  crossenv/
+    <sdk-api>/<cpu>/
+      build/
+      cross/
   tool-wrappers/
   sysroot-overlay/
 ```
@@ -96,6 +100,8 @@
 - `.ohloha/meson-cross/`
 
 `.staging/<pkg>` 不再作为长期复用的构建工作区；`.staging.native/` 和 `.staging.ndst/` 也不再作为 native/host 缓存路径。`native_sources_root`、`native_dst_root` 变量短期保留给旧 hook 使用，但应指向 `.ohloha/native/sources` 和 `.ohloha/native/dst`。
+
+Python crossenv 运行目录已迁入 `.ohloha/crossenv/<sdk-api>/<cpu>/`。BUILD 脚本应继续通过 `PY_CROSS_ROOT`、`HOST_SITE_PKGS`、`NUMPY_LIBROOT` 等变量访问，不要硬编码旧的 `crossenv_<cpu>` 路径。
 
 ## 构建生命周期
 
@@ -117,7 +123,7 @@
 14. 执行 `postbuilt_hook` 和 `POSTINST`。
 15. 校验安装目录，打包为 artifact payload。
 16. 原子写入 artifact manifest 和 `success`。
-17. 原子发布到 legacy 或 versioned dist 目录。
+17. 原子发布到 canonical versioned dist 目录。
 18. 按策略保留或删除 workdir。
 
 失败时：
@@ -148,7 +154,9 @@ target_root_with_pkgname=.ohloha/work/<build-id>/install/dist.<cpu>.<pkg>
 }
 ```
 
-没有 resolved map 时，可 fallback 到 `dist.<cpu>.<pkg>` 兼容 alias，保持旧脚本可用。
+没有 resolved map 时，旧串行入口只依赖当前 builder 进程中已构建包的 versioned dist 记录；调用方不应再依赖 `dist.<cpu>.<pkg>` alias。
+
+构建器也不会把已有 `dist.<cpu>.<pkg>-<version>` 目录反向扫描成依赖解析结果。单包重编如果需要依赖，调用方必须提供 resolved dependency map，或在同一 builder 进程中先构建依赖。这样可以避免同名多版本包被隐式 latest 或任意目录顺序选错。
 
 ## Native/Host 构建变量
 
@@ -200,11 +208,9 @@ target_root_with_pkgname=.ohloha/work/<build-id>/install/dist.<cpu>.<pkg>
 
 ```bash
 --resolved-deps=/path/to/resolved-deps.json
---cache-dir=/path/to/.ohloha
 --no-cache
 --force-rebuild
 --keep-failed-work
---log-file=/path/to/log
 ```
 
 `--resolved-deps` 文件由父目录 Go 调度器生成，`builder.sh` 只消费其中已经解析好的结果，不做依赖闭包或版本求解。当前 worker 端至少支持以下 dependency artifact 输入形态，并把结果规范化后写入 build fingerprint 和 artifact manifest：
@@ -407,16 +413,15 @@ type PackageInfo struct {
 
 ```text
 dist.<cpu>.<name>-<version>   # canonical
-dist.<cpu>.<name>             # legacy alias/current selected version
 ```
 
-legacy alias 可以是 symlink，也可以是 copy/atomic rename。为了兼容部署脚本，迁移初期建议继续生成真实目录。
+`dist.<cpu>.<name>` legacy alias 不再由构建器自动生成；如果外部脚本仍需要这个名字，应自行创建软链接，并明确它只代表当前选择版本。
 
 当前实现边界：
 
 - Go 侧已经引入 `PackageID{Name, Version}`，索引中记录 `BuildFile`，resolver 能处理版本约束并选择满足约束的最高版本。
 - `gen-pkg-index.sh` 已预留 `pkg/versions/<version>/BUILD` 额外版本扫描入口；这个目录结构就是多版本 BUILD 的承载方式。
-- 不能把“代码能读取额外版本目录”表述为“多版本包管理已经完整落地”。完整落地还需要至少一个现有包拥有额外版本目录，并完成对应依赖约束、构建、部署和安装验证。
+- `python3-numpy` 已迁移出两个真实额外版本目录，用于验证同名多版本索引、依赖约束解析和构建产物发布。
 - 当前同一次 xcompile 依赖闭包内，同名包只选择一个版本；尚未实现同一闭包中隔离安装两个同名不同版本的模型。
 
 ## Go DAG 调度设计
@@ -438,7 +443,6 @@ worker 命令：
 builder.sh --build-one \
   --cpu=aarch64 \
   --resolved-deps=/tmp/ohloha/<pkg-id>.deps.json \
-  --log-file=.ohloha/logs/<pkg-id>.log \
   <BUILD_FILE>
 ```
 
@@ -454,7 +458,7 @@ worker 日志约定：
 - `build:<build-id>`
 - `host-venv`
 - `native-tool:<name>`
-- `python-crossenv:<cpu>`
+- `python-crossenv:<sdk-api>/<cpu>`
 - `dist-publish:<name/version/arch>`
 
 普通 C/C++ 包可并发；修改共享 Python/crossenv/native host tool 的包应先用资源锁串行化。
@@ -466,7 +470,7 @@ worker 日志约定：
 - 现有 `BUILD` 模板变量。
 - 现有 hook 名称。
 - 旧 `./builder.sh <BUILD>...` 调用方式。
-- 旧 `dist.<cpu>.<pkg>` 输出目录。
+- 本地残留的旧 `dist.<cpu>.<pkg>` 目录可以被用户手动删除或自行用软链接维护；构建器不再自动发布该 alias。
 
 允许新增但不要立即强制：
 
@@ -519,9 +523,11 @@ git status --short
 缓存检查：
 
 ```bash
-./builder.sh --build-one --cpu=aarch64 <pkg>/BUILD
-./builder.sh --build-one --cpu=aarch64 <pkg>/BUILD
+./builder.sh --build-one --cpu=aarch64 <leaf-without-deps>/BUILD
+./builder.sh --build-one --cpu=aarch64 <leaf-without-deps>/BUILD
 ```
+
+依赖型包使用 `--build-one` 时应由 Go 调度器传入 `--resolved-deps`，或用旧串行入口按拓扑序把依赖 BUILD 一起传入。
 
 并发检查：
 
