@@ -80,6 +80,8 @@
   locks/
   logs/
   host-venv/
+  native/
+    build-python/
   crossenv/
     <sdk-api>/<cpu>/
       build/
@@ -95,13 +97,20 @@
 - `.staging.ndst/`
 - `dist.<cpu>.<pkg>`
 - `dist.<cpu>`
-- `dist.wheels/`
 - `crossenv_<cpu>/`
+- `build-python.dist`
 - `.ohloha/meson-cross/`
 
 `.staging/<pkg>` 不再作为长期复用的构建工作区；`.staging.native/` 和 `.staging.ndst/` 也不再作为 native/host 缓存路径。`native_sources_root`、`native_dst_root` 变量短期保留给旧 hook 使用，但应指向 `.ohloha/native/sources` 和 `.ohloha/native/dst`。
 
-Python crossenv 运行目录已迁入 `.ohloha/crossenv/<sdk-api>/<cpu>/`。BUILD 脚本应继续通过 `PY_CROSS_ROOT`、`HOST_SITE_PKGS`、`NUMPY_LIBROOT` 等变量访问，不要硬编码旧的 `crossenv_<cpu>` 路径。
+Python crossenv 运行目录已迁入 `.ohloha/crossenv/<sdk-api>/<cpu>/`。BUILD 脚本应继续通过 `PY_CROSS_ROOT`、`HOST_SITE_PKGS`、`NUMPY_LIBROOT`、`PYCROSS_CROSS_PYTHON`、`PYCROSS_CROSS_PIP`、`PYCROSS_BUILD_PIP` 等变量访问，不要硬编码旧的 `crossenv_<cpu>` 路径。通用 Python helper 负责将构建出的 wheel 归档到 `dist.wheels/`，该目录仍是生成物，不作为源码或 cache key 输入。CPython 交叉编译所需的 build-python 已迁入 `.ohloha/native/build-python`，旧根目录 `build-python.dist` 只作为 legacy 生成物识别。
+
+PyO3/Rust 包的边界：
+
+- `rustup`、`cargo`、`rustc` 及 Rust target 安装属于宿主环境前置，不应在单个包的 `BUILD` 中执行。
+- `maturin` 属于仓库私有 host tool，由 `.ohloha/host-venv/` 管理；包脚本应使用 `${HOST_MATURIN}` 或通用 `pyo3-rust` 构建类型，不调用裸 `pip` 或裸 `maturin`。
+- `setup_pycrossenv` 只负责 Python crossenv 和 Python 依赖路径；PyO3/Rust 变量由 `setup_pyo3_rust_cross_env` 设置。该 helper 会进入或复用 crossenv，并由配套 destroy helper 只退出自己创建的 crossenv。
+- Rust target、cc-rs、PyO3、maturin 参数必须从 `OHOS_CPU`、`HOST_SYSROOT`、`CC`/`CXX`/`AR`、`HOST_PYTHON_DIST` 等当前构建环境推导，不写死 `aarch64`。
 
 ## 构建生命周期
 
@@ -119,7 +128,7 @@ Python crossenv 运行目录已迁入 `.ohloha/crossenv/<sdk-api>/<cpu>/`。BUIL
 10. cache miss 时创建 `.ohloha/work/<build-id>/`。
 11. 从 patched source snapshot 复制源码到 workdir。
 12. 设置 hook 变量，让现有 `BUILD` hook 只看到隔离后的 workdir 路径。
-13. 执行 `custom_build` 或默认 autotools/CMake/Meson/pure-python 构建。
+13. 执行 `custom_build` 或默认 autotools/CMake/Meson/pure-python/PyO3 Rust 构建。
 14. 执行 `postbuilt_hook` 和 `POSTINST`。
 15. 校验安装目录，打包为 artifact payload。
 16. 原子写入 artifact manifest 和 `success`。

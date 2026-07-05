@@ -11,7 +11,7 @@ pkg_source_url="https://files.pythonhosted.org/packages/source/t/transformers/tr
 pkg_release_url=""
 pkg_license="Apache-2.0"
 pkg_support_archs="x86_64,aarch64,arm"
-pkg_build_type="pure-python"
+pkg_build_type="custom"
 pkg_build_parallism=""
 pkg_force_clean_build=""
 
@@ -60,11 +60,21 @@ prebuilt_patch_once_hook() {
 }
 
 custom_build() {
-	_custom_build_continue=true
+	build_python_cross_package -v --no-deps --no-build-isolation . || return 1
+	_custom_build_continue=false
 }
 
 postbuilt_hook() {
-	:
+	local wheel_dir="${current_python_wheelhouse:-}"
+	local out="${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages"
+	local wheel
+
+	[ -d "$wheel_dir" ] || { echo "ERROR: missing wheelhouse: ${wheel_dir}"; return 1; }
+	mkdir -p "$out" || return 1
+	for wheel in "$wheel_dir"/*.whl; do
+		[ -f "$wheel" ] || { echo "ERROR: no wheel in ${wheel_dir}"; return 1; }
+		"${HOST_TOOLS_PYTHON}" -m zipfile -e "$wheel" "$out" || return 1
+	done
 }
 
 ################ self-defined functions (local) goes below ################

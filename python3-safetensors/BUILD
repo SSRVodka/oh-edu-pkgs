@@ -11,7 +11,7 @@ pkg_source_url="https://files.pythonhosted.org/packages/source/s/safetensors/saf
 pkg_release_url=""
 pkg_license="Apache-2.0"
 pkg_support_archs="x86_64,aarch64,arm"
-pkg_build_type="custom"
+pkg_build_type="pyo3-rust"
 pkg_build_parallism=""
 pkg_force_clean_build=""
 
@@ -38,7 +38,7 @@ pkg_build_meson_extra_cmake_findroot_path=""
 ################# Hooks #################
 
 native_env_hook() {
-	export PATH="${HOME}/.cargo/bin:${PATH}"
+	:
 }
 
 custom_download_source() {
@@ -60,42 +60,20 @@ prebuilt_patch_once_hook() {
 }
 
 custom_build() {
-	# safetensors is a Rust+Python hybrid built with maturin (PyO3).
-	# Rust/cc-rs/PyO3 cross-compile env vars are set centrally in
-	# setup2.sh's setup_rust_cross_compile() (called by setup_pycrossenv).
-
-	export PATH="${HOME}/.cargo/bin:${PATH}"
-	rustup target add aarch64-unknown-linux-musl 2>/dev/null || true
-	pip install maturin 2>/dev/null || true
-
-	setup_pycrossenv
-
-	pushd ${current_source_root}
-	export MATURIN_NO_WHEEL_REPAIR=1
-	maturin build --interpreter "${PYO3_PYTHON}" --target aarch64-unknown-linux-musl --release --skip-auditwheel
-
-	local wheel_file=$(find ${current_source_root} -name "*.whl" -path "*/wheels/*" 2>/dev/null | head -1)
-	if [ -n "${wheel_file}" ]; then
-		local extract_dir="${current_source_root}/wheel_extracted"
-		rm -rf "${extract_dir}" && mkdir -p "${extract_dir}"
-		python3 -m zipfile -e "${wheel_file}" "${extract_dir}"
-		local site_pkgs="${HOST_SITE_PKGS}"
-		cp -r "${extract_dir}/safetensors" "${site_pkgs}/"
-		cp -r ${extract_dir}/safetensors-*.dist-info "${site_pkgs}/" 2>/dev/null || true
-	else
-		echo "ERROR: No wheel found after maturin build"
-		exit 1
-	fi
-	popd
-
-	destroy_pycrossenv
-	_custom_build_continue=false
+	_custom_build_continue=true
 }
 
 postbuilt_hook() {
-	local out=${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages
-	mkdir -p ${out}
-	cp -r ${HOST_SITE_PKGS}/safetensors* ${out}/
+	local wheel_dir="${current_python_wheelhouse:-}"
+	local out="${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages"
+	local wheel
+
+	[ -d "$wheel_dir" ] || { echo "ERROR: missing wheelhouse: ${wheel_dir}"; return 1; }
+	mkdir -p "$out" || return 1
+	for wheel in "$wheel_dir"/*.whl; do
+		[ -f "$wheel" ] || { echo "ERROR: no wheel in ${wheel_dir}"; return 1; }
+		"${HOST_TOOLS_PYTHON}" -m zipfile -e "$wheel" "$out" || return 1
+	done
 }
 
 ################ self-defined functions (local) goes below ################

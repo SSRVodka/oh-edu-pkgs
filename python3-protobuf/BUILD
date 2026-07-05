@@ -61,25 +61,23 @@ prebuilt_patch_once_hook() {
 
 custom_build() {
 
-	setup_pycrossenv
-
 	# protobuf 7.x bundles upb C library and compiles the Python C extension
 	# directly via setup.py (no cmake, no protoc needed at build time).
-	pushd ${current_source_root}
-	pip install -v --no-binary :all: --no-build-isolation .
-	popd
-
-	destroy_pycrossenv
+	build_python_cross_package -v --no-binary :all: --no-build-isolation . || return 1
 	_custom_build_continue=false
 }
 
 postbuilt_hook() {
-	local out=${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages
-	mkdir -p ${out}/google
-	cp -r ${HOST_SITE_PKGS}/google/protobuf ${out}/google/protobuf
-	cp -r ${HOST_SITE_PKGS}/google/protobuf-*.dist-info ${out}/ 2>/dev/null || true
-	# Also copy google/__init__.py if present
-	cp ${HOST_SITE_PKGS}/google/__init__.py ${out}/google/ 2>/dev/null || true
+	local wheel_dir="${current_python_wheelhouse:-}"
+	local out="${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages"
+	local wheel
+
+	[ -d "$wheel_dir" ] || { echo "ERROR: missing wheelhouse: ${wheel_dir}"; return 1; }
+	mkdir -p "$out" || return 1
+	for wheel in "$wheel_dir"/*.whl; do
+		[ -f "$wheel" ] || { echo "ERROR: no wheel in ${wheel_dir}"; return 1; }
+		"${HOST_TOOLS_PYTHON}" -m zipfile -e "$wheel" "$out" || return 1
+	done
 }
 
 ################ self-defined functions (local) goes below ################

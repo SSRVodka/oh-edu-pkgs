@@ -79,7 +79,9 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 >
 >   你需要使用时手动指定 `pkg_build_meson_cross_file` 为修改后的 `*.meson` 文件，例如 `${MESON_CROSS_FILE_BASE}`；
 >
-> - `pure_python` 构建类型的库：进入预先准备的 `crossenv`，使用 `pip install --no-binary :all:` 的 prefix 构建；
+> - `pure-python` 构建类型的库：进入预先准备的 `crossenv`，使用 `pip install --no-binary :all:` 的 prefix 构建；
+>
+> - `pyo3-rust` 构建类型的库：进入或复用 Python `crossenv`，设置 PyO3/Rust/Cargo/cc-rs 交叉编译变量，并通过仓库私有 host tool `${HOST_MATURIN}` 构建 maturin wheel；
 >
 > - `custom` 构建类型的库：不做任何处理；
 >
@@ -92,6 +94,7 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 > - `cmake` 类型：`grpc/BUILD`、`zstd/BUILD` 等；
 > - `autotools` 类型：`util-linux/BUILD`、`libncursesw/BUILD` 等；
 > - `pure-python` 类型：`python3-build`、`python3-setuptools` 等；
+> - `pyo3-rust` 类型：`python3-tokenizers`、`python3-safetensors` 等；
 
 ### 编译时注意事项
 
@@ -99,4 +102,6 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 
 编写 `BUILD` 时，`setup()` 应只填写静态元数据和不依赖构建现场的默认值。不要在 `setup()` 中调用 `get_pkg_dst_dir`，也不要读取 `HOST_PYTHON_DIST`、`NUMPY*_LIBROOT`、`target_root_*`、`CFLAGS/LDFLAGS` 等运行态变量来拼动态 flags。依赖路径、Python/numpy include/lib 路径、根据当前 arch/workdir 计算出的 CMake/autotools/meson flags，应放在 `custom_build`、`post_configure_hook` 等 build 阶段 hook 中设置。
 
-Python crossenv 运行目录由 `setup2.sh` 管理在 `.ohloha/crossenv/<sdk-api>/<cpu>/`。BUILD 中如需引用交叉 Python 环境，应使用 `PY_CROSS_ROOT`、`HOST_SITE_PKGS`、`PYPKG_OUTPUT_WHEEL_DIR` 等变量，不要硬编码旧的 `crossenv_<cpu>` 路径。
+Python crossenv 运行目录由 `setup2.sh` 管理在 `.ohloha/crossenv/<sdk-api>/<cpu>/`。BUILD 中如需引用交叉 Python 环境，应使用 `PY_CROSS_ROOT`、`HOST_SITE_PKGS`、`PYCROSS_CROSS_PYTHON`、`PYCROSS_CROSS_PIP`、`PYCROSS_BUILD_PIP`、`PYPKG_OUTPUT_WHEEL_DIR` 等变量，不要硬编码旧的 `crossenv_<cpu>` 路径。通用 Python helper 会先构建 wheel，归档到 `dist.wheels/`，再从本地 wheel 安装到 crossenv。CPython 交叉编译所需的 build-python 位于 `.ohloha/native/build-python`，根目录旧 `build-python.dist` 仅视为 legacy 生成物。
+
+PyO3/Rust 包不要在 `BUILD` 中修改 `PATH`、执行 `rustup target add` 或 `pip install maturin`。Rust 工具链和 target 是宿主环境前置；`maturin` 由 `.ohloha/host-venv/` 管理，通用 `pyo3-rust` 构建类型会使用明确的 `${HOST_MATURIN}`、`${HOST_TOOLS_PYTHON}` 和 Python crossenv 路径。

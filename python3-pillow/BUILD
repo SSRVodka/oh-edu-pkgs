@@ -135,8 +135,10 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
-	$BUILD_PIP install cmake
-	setup_pycrossenv
+	local build_rc=0
+
+	"${HOST_TOOLS_PYTHON}" -m pip install --disable-pip-version-check cmake || return 1
+	setup_pycrossenv || return 1
 
 	local pil_deps=$(get_pkg_names_from_deps $pkg_deps)
 	local pil_dep
@@ -147,7 +149,7 @@ custom_build() {
 	done
 	
 	pushd ${current_source_root}
-	python3 -m pip install . \
+	"${PYCROSS_CROSS_PYTHON}" -m pip install . \
 		-C zlib=enable -C jpeg=enable -C tiff=enable -C freetype=enable \
 		-C raqm=vendor -C fribidi=vendor \
 		-C lcms=enable -C webp=enable -C jpeg2000=enable \
@@ -155,12 +157,17 @@ custom_build() {
 		-C xcb=enable -C avif=enable \
 		-C platform-guessing=disable \
 		-C debug=true \
-		--no-binary :all:
-	
-	popd
+		--no-binary :all: || build_rc=$?
 
-	destroy_pycrossenv
+	popd || {
+		[ "$build_rc" -eq 0 ] && build_rc=1
+	}
+
+	destroy_pycrossenv || {
+		[ "$build_rc" -eq 0 ] && build_rc=1
+	}
 	_custom_build_continue=false
+	return "$build_rc"
 }
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)

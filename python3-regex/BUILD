@@ -96,24 +96,23 @@ prebuilt_patch_once_hook() {
 # Hook: customize building process.
 custom_build() {
 
-	# enter python cross compile env
-	setup_pycrossenv
-
-	pushd ${current_source_root}
-	pip install -v --no-binary :all: .
-	popd
-
-	destroy_pycrossenv
-
+	build_python_cross_package -v --no-binary :all: . || return 1
 	# not using normal building process
 	_custom_build_continue=false
 }
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	local out=${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages
-	mkdir -p ${out}
-	cp -r ${HOST_SITE_PKGS}/regex* ${out}/
+	local wheel_dir="${current_python_wheelhouse:-}"
+	local out="${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages"
+	local wheel
+
+	[ -d "$wheel_dir" ] || { echo "ERROR: missing wheelhouse: ${wheel_dir}"; return 1; }
+	mkdir -p "$out" || return 1
+	for wheel in "$wheel_dir"/*.whl; do
+		[ -f "$wheel" ] || { echo "ERROR: no wheel in ${wheel_dir}"; return 1; }
+		"${HOST_TOOLS_PYTHON}" -m zipfile -e "$wheel" "$out" || return 1
+	done
 }
 
 ################ self-defined functions (local) goes below ################

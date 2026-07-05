@@ -21,6 +21,8 @@ HOST_TOOLS_VENV=${OHLOHA_ROOT}/host-venv
 HOST_TOOLS_BIN=${HOST_TOOLS_VENV}/bin
 HOST_TOOLS_PYTHON=${HOST_TOOLS_BIN}/python3
 HOST_TOOLS_PIP=${HOST_TOOLS_BIN}/pip
+HOST_MATURIN=${HOST_TOOLS_BIN}/maturin
+HOST_TOOLS_SITE_PKGS=""
 PIP_CACHE_DIR=${OHLOHA_ROOT}/pip-cache
 export PIP_CACHE_DIR
 
@@ -114,6 +116,9 @@ ensure_host_tools_unlocked() {
 	if ! "${HOST_TOOLS_PYTHON}" -c 'import crossenv' >/dev/null 2>&1; then
 		missing_tools+=(crossenv)
 	fi
+	if [ ! -x "${HOST_MATURIN}" ]; then
+		missing_tools+=(maturin)
+	fi
 
 	if [ "${#missing_tools[@]}" -gt 0 ]; then
 		info "installing missing host build tools into private venv: ${missing_tools[*]}"
@@ -123,6 +128,7 @@ ensure_host_tools_unlocked() {
 
 ensure_host_tools() {
 	with_ohloha_lock host-tools ensure_host_tools_unlocked
+	HOST_TOOLS_SITE_PKGS=$("${HOST_TOOLS_PYTHON}" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')
 	export PATH="${HOST_TOOLS_BIN}:$PATH"
 }
 
@@ -198,14 +204,14 @@ TOOL_WRAPPER_BIN=${OHLOHA_TOOL_WRAPPER_ROOT}/${OHOS_SDK_API_VERSION}/${OHOS_CPU}
 mkdir -p "${TOOL_WRAPPER_BIN}"
 ln -sfn "${OHOS_SDK}/native/llvm/bin/llvm-strip" "${TOOL_WRAPPER_BIN}/strip"
 ln -sfn "${OHOS_SDK}/native/llvm/bin/llvm-profdata" "${TOOL_WRAPPER_BIN}/profdata"
-#export CFLAGS="-fPIC -D__MUSL__=1 -D__OPENHARMONY__=1 -I${TARGET_ROOT}/include -I${TARGET_ROOT}/include/lzma -I${TARGET_ROOT}/include/ncursesw -I${TARGET_ROOT}/include/readline -I${TARGET_ROOT}/ssl/include"
+#export CFLAGS="-fPIC -D__MUSL__=1 -D__OPENHARMONY__=1 -I${HOST_SYSROOT}/usr/include -I${HOST_SYSROOT}/usr/include/${OHOS_CPU}-linux-ohos"
 # keep track with ohos.toolchain.cmake + CMAKE_C_FLAGS_INIT
 # including arch-dependent headers
-export CFLAGS="-fPIC -D__MUSL__ -D__OHOS__ -D__OPENHARMONY__ -Wno-shorten-64-to-32 -Wno-unused-command-line-argument -I${TARGET_ROOT}/include -I${HOST_SYSROOT}/usr/include -I${HOST_SYSROOT}/usr/include/${OHOS_CPU}-linux-ohos"
+export CFLAGS="-fPIC -D__MUSL__ -D__OHOS__ -D__OPENHARMONY__ -Wno-shorten-64-to-32 -Wno-unused-command-line-argument -I${HOST_SYSROOT}/usr/include -I${HOST_SYSROOT}/usr/include/${OHOS_CPU}-linux-ohos"
 export CXXFLAGS=${CFLAGS}
 export CPPFLAGS=${CXXFLAGS}
-#export LDFLAGS="-fuse-ld=lld -L${TARGET_ROOT}/lib -L${TARGET_ROOT}/ssl/lib64 -L${CUR_DIR}/gfortran.libs.${OHOS_CPU}"
-export LDFLAGS="-fuse-ld=lld -lm -L${TARGET_ROOT}/lib -L${HOST_SYSROOT}/usr/${OHOS_LIBDIR}"
+#export LDFLAGS="-fuse-ld=lld -L${HOST_SYSROOT}/usr/${OHOS_LIBDIR}"
+export LDFLAGS="-fuse-ld=lld -lm -L${HOST_SYSROOT}/usr/${OHOS_LIBDIR}"
 export LDSHARED="${CC} ${LDFLAGS} -shared"
 
 export PATH=${TOOL_WRAPPER_BIN}:$PATH:${OHOS_SDK}/native/llvm/bin:${OHOS_SDK}/native/toolchains
@@ -641,7 +647,7 @@ PY_VERSION_CODE=312
 # keep track with build-python.sh
 PY_DEPS="libz openssl libffi sqlite bzip2 xz libncursesw libreadline libgettext util-linux"
 
-BUILD_PYTHON_DIST=${CUR_DIR}/build-python.dist
+BUILD_PYTHON_DIST=${OHLOHA_ROOT}/native/build-python
 BUILD_PYTHON_DIST_PYTHON=${BUILD_PYTHON_DIST}/bin/python3
 
 BUILD_PYTHON_BIN="${BUILD_PYTHON_DIST}/bin"
@@ -668,6 +674,9 @@ MESON_CROSS_FILE_BASE=${MESON_CROSS_ROOT}/base.meson
 PY_CROSS_ROOT=${OHLOHA_ROOT}/crossenv/${OHOS_SDK_API_VERSION}/${OHOS_CPU}
 CROSS_ROOT=$PY_CROSS_ROOT
 HOST_SITE_PKGS=${PY_CROSS_ROOT}/cross/lib/python${PY_VERSION}/site-packages
+PYCROSS_CROSS_PYTHON=${PY_CROSS_ROOT}/cross/bin/python3
+PYCROSS_CROSS_PIP=${PY_CROSS_ROOT}/cross/bin/pip
+PYCROSS_BUILD_PIP=${PY_CROSS_ROOT}/build/bin/pip
 
 PYPKG_OUTPUT_WHEEL_DIR=${CUR_DIR}/dist.wheels
 
@@ -805,11 +814,19 @@ enter_pycrossenv() {
 	if [[ ! -f ${CROSS_ROOT}/bin/activate ]]; then
 		rm -rf "${PY_CROSS_ROOT}"
 		mkdir -p "$(dirname "${PY_CROSS_ROOT}")"
-		"$BUILD_PYTHON" -m pip install --disable-pip-version-check crossenv || return 1
-		if ! "$BUILD_PYTHON" -m crossenv "$HOST_PYTHON" "${CROSS_ROOT}"; then
-			[ -f "${BUILD_PYTHON_BIN}/crossenv" ] || return 1
-			"$BUILD_PYTHON" "${BUILD_PYTHON_BIN}/crossenv" "$HOST_PYTHON" "${CROSS_ROOT}" || return 1
-		fi
+		# Build-python is a repo-private Python 3.12 used to create the crossenv so
+		# its generated build/cross venvs match the target Python ABI.  crossenv is
+		# installed in the host-tools venv, so load only that module path explicitly;
+		# exporting PYTHONPATH here would leak host-tools pip into the generated venv.
+		env -u PYTHONPATH "${BUILD_PYTHON}" - "${HOST_TOOLS_SITE_PKGS}" "$HOST_PYTHON" "${CROSS_ROOT}" <<'PY' || return 1
+import runpy
+import sys
+
+site_pkgs, host_python, cross_root = sys.argv[1:4]
+sys.path.insert(0, site_pkgs)
+sys.argv = ["crossenv", host_python, cross_root]
+runpy.run_module("crossenv", run_name="__main__")
+PY
 	fi
 	. "${CROSS_ROOT}/bin/activate" || return 1
 }
@@ -818,50 +835,108 @@ exit_pycrossenv() {
 	deactivate || return 1
 }
 
-# Centralized Rust/PyO3/cc-rs cross-compilation setup.
-# Called by builder.sh's setup_pycrossenv() after enter_pycrossenv.
-# Sets env vars for maturin-based packages (tokenizers, safetensors, etc.)
-# and CMAKE_ASM_COMPILER for cmake packages using ASM (zstd, etc.).
-setup_rust_cross_compile() {
-	local ohos_sysroot="${OHOS_SDK}/native/sysroot"
-	local ohos_cc="${OHOS_SDK}/native/llvm/bin/clang"
-	local ohos_cxx_inc="${OHOS_SDK}/native/llvm/include/libcxx-ohos/include/c++/v1"
+ohos_rust_target_for_cpu() {
+	case "${1:-}" in
+		aarch64) printf '%s' "aarch64-unknown-linux-ohos" ;;
+		arm) printf '%s' "armv7-unknown-linux-ohos" ;;
+		x86_64) printf '%s' "x86_64-unknown-linux-ohos" ;;
+		*) error "unsupported OHOS_CPU for Rust/PyO3: '${1:-}'"; return 1 ;;
+	esac
+}
 
-	# CMAKE_ASM_COMPILER for cmake packages with ASM (e.g. zstd)
-	export CMAKE_ASM_COMPILER="${ohos_cc}"
+cargo_env_key_for_target() {
+	printf '%s' "${1:-}" | tr '[:lower:]-' '[:upper:]_'
+}
 
-	# Rust target + linker
-	export CARGO_BUILD_TARGET=aarch64-unknown-linux-musl
-	export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER="${ohos_cc}"
-	export RUSTFLAGS="-C linker=${ohos_cc} \
-		-C link-arg=--target=aarch64-linux-ohos \
-		-C link-arg=--sysroot=${ohos_sysroot} \
-		-C link-arg=-L$(get_pkg_dst_dir python3)/lib \
-		-C link-arg=-lpython${PY_VERSION} \
-		-C link-arg=-l:libunwind.a"
+setup_pyo3_rust_cross_env() {
+	# PyO3/maturin builds still need the Python crossenv for the target interpreter
+	# and target site-packages, so this helper owns setup/teardown when the caller
+	# has not already entered pycrossenv.
+	local rc=0
+	_pyo3_rust_started_pycrossenv=false
+	if [ -z "${pycrossenv_lock_dir:-}" ]; then
+		setup_pycrossenv || return 1
+		_pyo3_rust_started_pycrossenv=true
+	fi
 
-	# cc-rs overrides: prevent duplicate --target and wrong C++ stdlib
-	export CC_aarch64_unknown_linux_musl="${ohos_cc}"
-	export CXX_aarch64_unknown_linux_musl="${OHOS_SDK}/native/llvm/bin/clang++"
+	if [ ! -x "${HOST_MATURIN}" ]; then
+		error "maturin not found in host tools venv: ${HOST_MATURIN}"
+		destroy_pyo3_rust_cross_env || true
+		return 1
+	fi
+	if ! command -v cargo >/dev/null 2>&1; then
+		error "cargo not found; install Rust toolchain before building pyo3-rust packages"
+		destroy_pyo3_rust_cross_env || true
+		return 1
+	fi
+
+	local rust_target cargo_key ohos_target cc_bin cxx_bin cxx_inc python_prefix
+	rust_target=$(ohos_rust_target_for_cpu "${OHOS_CPU}") || rc=$?
+	if [ "$rc" -eq 0 ]; then
+		ensure_pyo3_rust_target "${rust_target}" || rc=$?
+	fi
+	if [ "$rc" -ne 0 ]; then
+		destroy_pyo3_rust_cross_env || true
+		return "$rc"
+	fi
+	cargo_key=$(cargo_env_key_for_target "${rust_target}")
+	ohos_target="${OHOS_CPU}-linux-ohos"
+	cc_bin="${OHOS_SDK}/native/llvm/bin/clang"
+	cxx_bin="${OHOS_SDK}/native/llvm/bin/clang++"
+	cxx_inc="${OHOS_SDK}/native/llvm/include/libcxx-ohos/include/c++/v1"
+	python_prefix=$(get_pkg_dst_dir python3) || rc=$?
+	if [ "$rc" -ne 0 ]; then
+		destroy_pyo3_rust_cross_env || true
+		return "$rc"
+	fi
+
+	# Cargo and cc-rs use target-qualified env var names.  Keep this mapping here
+	# so package BUILD files do not need to know OHOS target triples or SDK paths.
+	export CARGO_BUILD_TARGET="${rust_target}"
+	export "CARGO_TARGET_${cargo_key}_LINKER=${cc_bin}"
+	export "CARGO_TARGET_${cargo_key}_AR=${AR}"
+	export "CC_${cargo_key}=${cc_bin}"
+	export "CXX_${cargo_key}=${cxx_bin}"
+	export "AR_${cargo_key}=${AR}"
+	export "CFLAGS_${cargo_key}=--target=${ohos_target} --sysroot=${HOST_SYSROOT} ${CFLAGS:-}"
+	export "CXXFLAGS_${cargo_key}=--target=${ohos_target} --sysroot=${HOST_SYSROOT} -I${cxx_inc} ${CXXFLAGS:-}"
 	export CRATE_CC_NO_DEFAULTS=1
-	export CFLAGS_aarch64_unknown_linux_musl="--target=aarch64-linux-ohos --sysroot=${ohos_sysroot} -I${ohos_cxx_inc}"
-	export CXXFLAGS_aarch64_unknown_linux_musl="--target=aarch64-linux-ohos --sysroot=${ohos_sysroot} -I${ohos_cxx_inc} -std=c++17"
 	export CXXSTDLIB="c++"
-
-	# PyO3 cross-compilation
-	local host_python=$(which python3)
-	export PYO3_PYTHON="${host_python}"
+	export MATURIN_NO_WHEEL_REPAIR=1
+	export PYO3_CROSS=1
+	export PYO3_PYTHON="${PYCROSS_CROSS_PYTHON}"
 	export PYO3_CROSS_PYTHON_VERSION="${PY_VERSION}"
-	export PYO3_CROSS_LIB_DIR="${HOST_PYTHON_DIST}/lib"
-	export PYO3_CROSS_INCLUDE_DIR="${HOST_PYTHON_DIST}/include/python${PY_VERSION}"
+	export PYO3_CROSS_LIB_DIR="${python_prefix}/${OHOS_LIBDIR}"
+	export PYO3_CROSS_INCLUDE_DIR="${python_prefix}/include/python${PY_VERSION}"
+	# Link the extension against the cross-built target libpython, not the host
+	# Python used to run maturin.
+	export RUSTFLAGS="-C linker=${cc_bin} \
+		-C link-arg=--target=${ohos_target} \
+		-C link-arg=--sysroot=${HOST_SYSROOT} \
+		-C link-arg=-L${python_prefix}/${OHOS_LIBDIR} \
+		-C link-arg=-lpython${PY_VERSION}"
+}
 
-	# libgcc_s stub (OH uses libunwind, Rust musl target expects libgcc_s).
-	# TODO: move this to .ohloha/sysroot-overlay instead of touching the SDK sysroot.
-	with_ohloha_lock libgcc-stub bash -c \
-		'echo "" | "$1" rcs "$2" 2>/dev/null || true' \
-		_ \
-		"${OHOS_SDK}/native/llvm/bin/llvm-ar" \
-		"${ohos_sysroot}/usr/lib/aarch64-linux-ohos/libgcc_s.a"
+ensure_pyo3_rust_target() {
+	local rust_target="${1:-}"
+	[ -n "${rust_target}" ] || { error "empty Rust target"; return 1; }
+	if ! command -v rustup >/dev/null 2>&1; then
+		if rustc --print target-list 2>/dev/null | grep -qx "${rust_target}"; then
+			return 0
+		fi
+		error "rustup not found and rust target cannot be verified: ${rust_target}"
+		return 1
+	fi
+	with_ohloha_lock "rust-target-${rust_target}" rustup target add "${rust_target}"
+}
+
+destroy_pyo3_rust_cross_env() {
+	local rc=0
+	if [ "x${_pyo3_rust_started_pycrossenv:-false}" = "xtrue" ]; then
+		destroy_pycrossenv || rc=$?
+	fi
+	_pyo3_rust_started_pycrossenv=false
+	return "$rc"
 }
 
 generate_meson_cross_files

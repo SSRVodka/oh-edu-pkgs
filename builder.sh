@@ -22,6 +22,7 @@ target_root_prefix_without_pkgname=""
 current_source_fresh=false
 current_work_root=""
 current_build_id=""
+current_python_wheelhouse=""
 builder_no_cache=false
 builder_force_rebuild=false
 builder_keep_failed_work=false
@@ -50,7 +51,7 @@ validate_semver() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?(\+[a-zA-Z
 validate_version() { [[ "$1" =~ ^[0-9]+(\.[0-9]+){0,2}(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$ ]]; }
 validate_url() { [[ "$1" =~ ^https?:// ]]; }
 validate_no_space() { [[ ! "$1" =~ [[:space:]] ]]; }
-validate_build_type() { [[ "$1" =~ ^(autotools|cmake|meson|pure-python|custom)$ ]]; }
+validate_build_type() { [[ "$1" =~ ^(autotools|cmake|meson|pure-python|pyo3-rust|custom)$ ]]; }
 validate_archs() {
     local IFS=','
     for arch in $1; do
@@ -1553,7 +1554,7 @@ validate_config() {
     [[ -n "${pkg_support_archs:-}" ]] && ! validate_archs "$pkg_support_archs" && error "pkg_support_archs invalid" && ((errors++))
     
     [[ -z "${pkg_build_type:-}" ]] && error "pkg_build_type is required" && ((errors++))
-    [[ -n "${pkg_build_type:-}" ]] && ! validate_build_type "$pkg_build_type" && error "pkg_build_type must be autotools, cmake, or meson" && ((errors++))
+    [[ -n "${pkg_build_type:-}" ]] && ! validate_build_type "$pkg_build_type" && error "pkg_build_type must be autotools, cmake, meson, pure-python, pyo3-rust, or custom" && ((errors++))
     
     [[ -n "${pkg_deps:-}" ]] && ! validate_no_space "$pkg_deps" && error "pkg_deps cannot contain spaces" && ((errors++))
     [[ -n "${pkg_build_deps:-}" ]] && ! validate_no_space "$pkg_build_deps" && error "pkg_build_deps cannot contain spaces" && ((errors++))
@@ -1730,6 +1731,11 @@ setup_pycrossenv() {
         return 1
     fi
 
+    if [ -n "${pycrossenv_lock_dir:-}" ]; then
+        error "setup_pycrossenv called while another pycrossenv is active in this process"
+        return 1
+    fi
+
     local buildpy_libdir="${BUILD_PYTHON_DIST}/lib"
     if [[ ":${LD_LIBRARY_PATH:-}:" != *":${buildpy_libdir}:"* ]]; then
         export LD_LIBRARY_PATH=${buildpy_libdir}:$LD_LIBRARY_PATH
@@ -1758,10 +1764,6 @@ setup_pycrossenv() {
         set_meson_list $ms_sh "common_ld_flags" "$LDFLAGS"
     done
 
-    if [ -n "${pycrossenv_lock_dir:-}" ]; then
-        error "setup_pycrossenv called while another pycrossenv is active in this process"
-        return 1
-    fi
     acquire_ohloha_lock "pycrossenv-${OHOS_CPU}" pycrossenv_lock_dir || return 1
 
     # this modifies envs like PATH and _PS and uses the shared per-arch pycrossenv.
@@ -1770,12 +1772,6 @@ setup_pycrossenv() {
         return 1
     }
 
-    # Set up Rust/PyO3/cc-rs/ASM cross-compilation env vars centrally.
-    # Individual BUILD files no longer need to set these.
-    setup_rust_cross_compile || {
-        destroy_pycrossenv || true
-        return 1
-    }
 }
 
 destroy_pycrossenv() {
@@ -1793,6 +1789,113 @@ release_pycrossenv_lock() {
         release_ohloha_lock "$pycrossenv_lock_dir" || return 1
         pycrossenv_lock_dir=""
     fi
+}
+
+archive_python_wheels() {
+    local wheel_dir="${1:-}"
+    local wheel
+
+    [ -n "$wheel_dir" ] || { error "archive_python_wheels: empty wheel dir"; return 1; }
+    mkdir -p "${PYPKG_OUTPUT_WHEEL_DIR}" || return 1
+    while IFS= read -r wheel; do
+        cp -f "$wheel" "${PYPKG_OUTPUT_WHEEL_DIR}/" || return 1
+    done < <(find "$wheel_dir" -maxdepth 1 -type f -name "*.whl" | sort)
+}
+
+install_python_wheelhouse() {
+    local wheel_dir="${1:-}"
+    local -a wheels=()
+
+    [ -n "$wheel_dir" ] || { error "install_python_wheelhouse: empty wheel dir"; return 1; }
+    mapfile -t wheels < <(find "$wheel_dir" -maxdepth 1 -type f -name "*.whl" | sort)
+    if [ "${#wheels[@]}" -eq 0 ]; then
+        error "no wheels produced in ${wheel_dir}"
+        return 1
+    fi
+    archive_python_wheels "$wheel_dir" || return 1
+    "${PYCROSS_CROSS_PIP}" install --force-reinstall --no-deps --no-index --find-links "$wheel_dir" "${wheels[@]}"
+}
+
+build_python_cross_package_active() {
+    local build_rc=0
+    local wheel_dir
+
+    wheel_dir="${current_work_root}/wheels/${pkg_name}"
+    current_python_wheelhouse="$wheel_dir"
+    rm -rf "$wheel_dir"
+    mkdir -p "$wheel_dir" || build_rc=$?
+
+    pushd "${current_source_root}" >/dev/null || build_rc=$?
+    if [ "$build_rc" -eq 0 ]; then
+        "${PYCROSS_CROSS_PIP}" wheel --wheel-dir "$wheel_dir" "$@" || build_rc=$?
+        if [ "$build_rc" -eq 0 ]; then
+            install_python_wheelhouse "$wheel_dir" || build_rc=$?
+        fi
+        popd >/dev/null || {
+            [ "$build_rc" -eq 0 ] && build_rc=1
+        }
+    fi
+
+    return "$build_rc"
+}
+
+build_python_cross_package() {
+    local build_rc=0
+
+    setup_pycrossenv || return 1
+    build_python_cross_package_active "$@" || build_rc=$?
+    destroy_pycrossenv || {
+        [ "$build_rc" -eq 0 ] && build_rc=1
+    }
+    return "$build_rc"
+}
+
+build_pyo3_rust_package() {
+    local build_rc=0
+    local pushed=false
+    local wheel_dir
+    local -a wheels=()
+
+    setup_pyo3_rust_cross_env || return 1
+
+    wheel_dir="${current_work_root}/wheels/${pkg_name}"
+    current_python_wheelhouse="$wheel_dir"
+    rm -rf "$wheel_dir"
+    mkdir -p "$wheel_dir" || build_rc=$?
+
+    if [ "$build_rc" -eq 0 ]; then
+        pushd "${current_source_root}" >/dev/null || build_rc=$?
+    fi
+    if [ "$build_rc" -eq 0 ]; then
+        pushed=true
+        "${HOST_MATURIN}" build \
+            --interpreter "${PYO3_PYTHON}" \
+            --target "${CARGO_BUILD_TARGET}" \
+            --release \
+            --skip-auditwheel \
+            --out "$wheel_dir" \
+        || build_rc=$?
+    fi
+
+    if [ "$build_rc" -eq 0 ]; then
+        mapfile -t wheels < <(find "$wheel_dir" -maxdepth 1 -type f -name "*.whl" | sort)
+        if [ "${#wheels[@]}" -eq 0 ]; then
+            error "pyo3-rust build did not produce a wheel"
+            build_rc=1
+        else
+            archive_python_wheels "$wheel_dir" || build_rc=$?
+        fi
+    fi
+
+    if [ "$pushed" = true ]; then
+        popd >/dev/null || {
+            [ "$build_rc" -eq 0 ] && build_rc=1
+        }
+    fi
+    destroy_pyo3_rust_cross_env || {
+        [ "$build_rc" -eq 0 ] && build_rc=1
+    }
+    return "$build_rc"
 }
 
 download() {
@@ -1906,11 +2009,10 @@ build() {
             || { error "build_mesonproj_with_deps failed"; build_rc=1; }
             ;;
         xpure-python)
-            pushd ${current_source_root}
-            setup_pycrossenv
-            pip install -v --no-binary :all: . || { error "pure-python pip build failed"; build_rc=1; }
-            destroy_pycrossenv
-            popd
+            build_python_cross_package -v --no-binary :all: . || { error "pure-python pip build failed"; build_rc=1; }
+            ;;
+        xpyo3-rust)
+            build_pyo3_rust_package || { error "pyo3-rust build failed"; build_rc=1; }
             ;;
         xcustom)
             info "user-defined custom build process finished"
@@ -2072,6 +2174,7 @@ build_package() {
     current_source_fresh=false
     current_build_id=""
     current_work_root=""
+    current_python_wheelhouse=""
 
     source "$build_file"
     refresh_python_dependency_env

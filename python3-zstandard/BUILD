@@ -61,26 +61,37 @@ prebuilt_patch_once_hook() {
 
 custom_build() {
 
-	setup_pycrossenv
+	local build_rc=0
+	setup_pycrossenv || return 1
 
 	# zstandard's setup.py imports make_cffi.py which calls cffi.FFI() and
 	# imports _cffi_backend. The crossenv's cross/bin/python3 is the host
 	# (x86) kernel, so _cffi_backend.so must be x86. Install cffi to the
 	# BUILD side (host python), not the CROSS side.
-	${PY_CROSS_ROOT}/build/bin/pip install cffi
+	"${PYCROSS_BUILD_PIP}" install cffi || build_rc=$?
 
-	pushd ${current_source_root}
-	pip install -v --no-binary :all: --no-build-isolation .
-	popd
+	if [ "$build_rc" -eq 0 ]; then
+		build_python_cross_package_active -v --no-binary :all: --no-build-isolation . || build_rc=$?
+	fi
 
-	destroy_pycrossenv
+	destroy_pycrossenv || {
+		[ "$build_rc" -eq 0 ] && build_rc=1
+	}
 	_custom_build_continue=false
+	return "$build_rc"
 }
 
 postbuilt_hook() {
-	local out=${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages
-	mkdir -p ${out}
-	cp -r ${HOST_SITE_PKGS}/zstandard* ${out}/
+	local wheel_dir="${current_python_wheelhouse:-}"
+	local out="${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages"
+	local wheel
+
+	[ -d "$wheel_dir" ] || { echo "ERROR: missing wheelhouse: ${wheel_dir}"; return 1; }
+	mkdir -p "$out" || return 1
+	for wheel in "$wheel_dir"/*.whl; do
+		[ -f "$wheel" ] || { echo "ERROR: no wheel in ${wheel_dir}"; return 1; }
+		"${HOST_TOOLS_PYTHON}" -m zipfile -e "$wheel" "$out" || return 1
+	done
 }
 
 ################ self-defined functions (local) goes below ################

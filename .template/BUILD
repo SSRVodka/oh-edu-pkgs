@@ -36,13 +36,16 @@ pkg_license="Apache-2.0"
 # [REQUIRED, NON-EMPTY, seperated by commas, NO-SPACE]. e.g., x86_64,aarch64,arm,riscv
 pkg_support_archs="x86_64,aarch64,arm"
 # [REQUIED, NON-EMPTY]
-# choose one: "autotools" (configure and make), "cmake", "meson", "pure-python", "custom"
+# choose one: "autotools" (configure and make), "cmake", "meson", "pure-python", "pyo3-rust", "custom"
 # NOTE:
 #  - "pure-python" is ONLY valid for those packages without ANY native package dependency.
+#  - "pyo3-rust" is for maturin/PyO3 Rust extension packages; rustup/cargo/rustc and Rust targets must be prepared before build.
 #  - "custom" will skip the default build process
 #  - add "python3,python3-build,python3-wheel,python3-setuptools" to pkg_build_deps if you use "pure-python"
+#  - add "python3" to pkg_build_deps if you use "pyo3-rust"
 #  - add "python3" to pkg_build_deps if you use "meson"
 #  - you are responsible to set setup_pycrossenv if you set pkg_build_type == "meson", ensure meson, and use destroy_pycrossenv before finishing building this package.
+#  - do not run "rustup target add" or "pip install maturin" in BUILD hooks; maturin is managed by .ohloha/host-venv.
 pkg_build_type=""
 # [OPTIONAL]
 pkg_build_parallism=""
@@ -95,7 +98,9 @@ pkg_build_meson_extra_cmake_findroot_path=""
 #  - ${native_sources_root}: root for native sources (staging area)
 #  - cross-compiling variables (reset for each package): CC, CXX, AR, CFLAGS, PKG_CONFIG_*, ...
 #  - global configurations: OHOS_ARCH, OHOS_CPU, OHOS_LIBDIR, PATCH_FILE_ROOT, MESON_CROSS_ROOT, HOST_SYSROOT, ... (see setup.sh)
-#  - Python crossenv paths: PY_CROSS_ROOT, HOST_SITE_PKGS, PYPKG_OUTPUT_WHEEL_DIR; do not hardcode crossenv_<cpu>
+#  - Python crossenv paths: PY_CROSS_ROOT, HOST_SITE_PKGS, PYCROSS_CROSS_PYTHON,
+#    PYCROSS_CROSS_PIP, PYCROSS_BUILD_PIP, PYPKG_OUTPUT_WHEEL_DIR; do not hardcode crossenv_<cpu>
+#  - Python package helpers archive wheels to ${PYPKG_OUTPUT_WHEEL_DIR}; keep it as generated output.
 # Available local variables (except for native_env_hook):
 #  - ${current_source_url}: user configured `pkg_source_url` above (in `setup()`)
 #  - ${current}: the location (directory) of this script

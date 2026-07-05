@@ -58,17 +58,23 @@ prebuilt_patch_once_hook() {
 
 custom_build() {
 
-	setup_pycrossenv
+	local build_rc=0
+	setup_pycrossenv || return 1
 
 	# evdev generates ecodes.c from Linux kernel headers at build time via
 	# genecodes.py. Point build_ecodes --evdev-headers to the OH SDK sysroot
-	# headers. 5 keycode macros from newer kernels (5.x+) are missing from
-	# the sysroot input-event-codes.h — append them before code generation.
+	# headers. Some newer keycode macros are missing from the SDK header; patch
+	# a workdir-local copy instead of writing to the SDK sysroot.
 	local sysroot_inc="${OHOS_SDK}/native/sysroot/usr/include/linux"
-	local evdev_headers="${sysroot_inc}/input.h:${sysroot_inc}/input-event-codes.h"
+	local evdev_header_root="${current_source_root}/ohloha-build/evdev-headers/linux"
+	local evdev_header_include="${current_source_root}/ohloha-build/evdev-headers"
+	local evdev_headers="${evdev_header_root}/input.h:${evdev_header_root}/input-event-codes.h"
 
-	if ! grep -q 'KEY_ALL_APPLICATIONS' ${sysroot_inc}/input-event-codes.h 2>/dev/null; then
-		cat >> ${sysroot_inc}/input-event-codes.h << 'KEYEOF'
+	mkdir -p "${evdev_header_root}"
+	cp "${sysroot_inc}/input.h" "${evdev_header_root}/input.h"
+	cp "${sysroot_inc}/input-event-codes.h" "${evdev_header_root}/input-event-codes.h"
+	if ! grep -q 'KEY_ALL_APPLICATIONS' "${evdev_header_root}/input-event-codes.h" 2>/dev/null; then
+		cat >> "${evdev_header_root}/input-event-codes.h" << 'KEYEOF'
 /* Added by ohloha for newer kernel keycodes */
 #define KEY_ALL_APPLICATIONS   0x2a4
 #define KEY_LINK_PHONE         0x2a6
@@ -77,20 +83,37 @@ custom_build() {
 #define KEY_DICTATE            0x2aa
 KEYEOF
 	fi
+	CFLAGS="-I${evdev_header_include} ${CFLAGS:-}"
+	CPPFLAGS="-I${evdev_header_include} ${CPPFLAGS:-}"
+	export CFLAGS CPPFLAGS
 
-	pushd ${current_source_root}
-	python3 setup.py build_ecodes --evdev-headers ${evdev_headers}
-	pip install -v --no-binary :all: --no-build-isolation .
-	popd
+	pushd "${current_source_root}"
+	"${PYCROSS_CROSS_PYTHON}" setup.py build_ecodes --evdev-headers "${evdev_headers}" || build_rc=$?
+	popd || {
+		[ "$build_rc" -eq 0 ] && build_rc=1
+	}
+	if [ "$build_rc" -eq 0 ]; then
+		build_python_cross_package_active -v --no-binary :all: --no-build-isolation . || build_rc=$?
+	fi
 
-	destroy_pycrossenv
+	destroy_pycrossenv || {
+		[ "$build_rc" -eq 0 ] && build_rc=1
+	}
 	_custom_build_continue=false
+	return "$build_rc"
 }
 
 postbuilt_hook() {
-	local out=${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages
-	mkdir -p ${out}
-	cp -r ${HOST_SITE_PKGS}/evdev* ${out}/
+	local wheel_dir="${current_python_wheelhouse:-}"
+	local out="${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages"
+	local wheel
+
+	[ -d "$wheel_dir" ] || { echo "ERROR: missing wheelhouse: ${wheel_dir}"; return 1; }
+	mkdir -p "$out" || return 1
+	for wheel in "$wheel_dir"/*.whl; do
+		[ -f "$wheel" ] || { echo "ERROR: no wheel in ${wheel_dir}"; return 1; }
+		"${HOST_TOOLS_PYTHON}" -m zipfile -e "$wheel" "$out" || return 1
+	done
 }
 
 ################ self-defined functions (local) goes below ################

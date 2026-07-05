@@ -87,7 +87,7 @@ native_env_hook() {
 	# build build-python first
 	# NOTE: keep same with setup.sh
 	# NOTE: this variable will live after this package is built
-	BUILD_PYTHON_DIST=${native_project_root}/build-python.dist
+	BUILD_PYTHON_DIST=${native_project_root}/.ohloha/native/build-python
 	echo "Set Build-Python Destination: ${BUILD_PYTHON_DIST}"
 	# no need to build
 	if [ -f "${BUILD_PYTHON_DIST}/bin/python3" ]; then

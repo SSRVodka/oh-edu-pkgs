@@ -16,7 +16,7 @@
 ## 当前状态和剩余问题
 
 - `.staging/<pkg_name>` 和共享 `dist.<cpu>` 中间安装前缀已不再作为新构建路径；如本地残留，只视为旧生成物。
-- Meson、ninja、crossenv 等 host 工具已进入 `.ohloha/host-venv/`；Python crossenv 运行目录已迁入 `.ohloha/crossenv/<sdk-api>/<cpu>/`。
+- Meson、ninja、crossenv、maturin 等 host 工具已进入 `.ohloha/host-venv/`；Python crossenv 运行目录已迁入 `.ohloha/crossenv/<sdk-api>/<cpu>/`；CPython 交叉编译所需 build-python 已迁入 `.ohloha/native/build-python`。
 - `setup2.sh` 仍会在迁移期为 `${OHOS_SDK}` sysroot 中的 `libgcc_s.a` stub 写入加锁；后续目标是迁到 `.ohloha/sysroot-overlay/<sdk-api>/<cpu>/...`，彻底避免写 SDK。
 - `builder.sh` 已提供单包 worker 和缓存入口，但仍不负责解析依赖图；父目录 Go 项目负责依赖闭包、版本解析、DAG 和 `--resolved-deps`。
 - `VERSION` / `VERSIONS` 文本索引已废弃；当前以 `PKG_INDEX.json` 和 artifact manifest 为机器可读入口。
@@ -49,6 +49,7 @@
 - [x] 把 `crossenv` 安装也迁移到 host venv 或明确的私有工具环境。
 - [x] 把 Python crossenv 运行目录迁移到 `.ohloha/crossenv/<sdk-api>/<cpu>/`，不再使用仓库根 `crossenv_<cpu>`。
 - [x] 把 `meson`、`ninja`、`crossenv` 等 host 工具路径统一放入 `PATH` 前缀。
+- [x] 把 `maturin` 作为 host tool 管理，供 `pyo3-rust` 包使用，避免在包 `BUILD` 中临时 `pip install`。
 - [x] 避免在 `${OHOS_SDK}/native/llvm/bin` 直接创建 `strip`、`profdata` symlink；改用 `.ohloha/tool-wrappers/<sdk-api>/<cpu>/bin`。
 - [x] 给 SDK sysroot 中 `libgcc_s.a` stub 的迁移期写入加 lock；后续仍需改为 `.ohloha/sysroot-overlay/<sdk-api>/<cpu>/...`，彻底避免写 SDK。
 - [x] 给 host venv 初始化加 lock，避免并发进程同时安装工具。
@@ -93,6 +94,7 @@
   locks/
   logs/
   host-venv/
+  native/
   crossenv/
   tool-wrappers/
   sysroot-overlay/
@@ -269,7 +271,7 @@ boost/
 
 - 继续支持：`./builder.sh <BUILD>...` 串行入口、旧 hook 变量名。
 - 不再支持：`gen-versions.sh`、手工维护 `VERSION` / `VERSIONS`、依赖 `.staging/<pkg>` 或 `PATCHED_BY_OHLOHA` 判断源码状态。
-- 迁移期保留但不应扩展：`SRC_ROOT` 变量，以及本地残留的旧 `dist.<cpu>.<pkg>`、`crossenv_<cpu>` 目录；新逻辑应使用 `.ohloha/` work/source/artifact/crossenv 目录、`dist.<cpu>.<pkg>-<version>` 和 resolved dependency map。
+- 迁移期保留但不应扩展：`SRC_ROOT` 变量，以及本地残留的旧 `dist.<cpu>.<pkg>`、`crossenv_<cpu>`、`build-python.dist` 目录；新逻辑应使用 `.ohloha/` work/source/artifact/crossenv/native 目录、`dist.<cpu>.<pkg>-<version>` 和 resolved dependency map。
 
 验收：
 
