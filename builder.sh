@@ -26,6 +26,8 @@ builder_no_cache=false
 builder_force_rebuild=false
 builder_keep_failed_work=false
 resolved_deps_file=""
+# Internal retry code used when source preparation changes the final build id.
+build_lock_retry_rc=75
 
 native_project_root=$(dirname "$(readlink -f "$0")")
 ohloha_root=${native_project_root}/.ohloha
@@ -1776,51 +1778,16 @@ fail_build_package() {
     return 1
 }
 
-build_package() {
+build_package_lock_name() {
+    local path_component
+
+    path_component=$(artifact_path_component_for_build_id "${current_build_id:-}") || return 1
+    printf 'build-%s' "$path_component"
+}
+
+build_package_locked() {
     local build_file="${1:-}"
-    
-    [[ ! -f "$build_file" ]] && error "BUILD file not found: $build_file" && return 1
 
-    info "========================================"
-    info "Processing: $build_file"
-    info "========================================"
-
-    clear_vars
-    save_xcompile_flags
-
-    # setup dependencies for native binaries & libraries
-    PATH="${native_dst_root}/bin:$PATH"
-    LD_LIBRARY_PATH="${native_dst_root}/lib:$LD_LIBRARY_PATH"
-    
-    post_configure_hook() { :; }
-    current_source_url=""
-    current=""
-    sources_root=""
-    current_source_root=""
-    current_build_root=""
-    target_root_prefix_without_pkgname=""
-    target_root_with_pkgname=""
-    current_source_fresh=false
-    current_build_id=""
-    current_work_root=""
-
-    source "$build_file"
-    setup || { fail_build_package "setup() failed"; return 1; }
-    validate_config || { fail_build_package ""; return 1; }
-    
-    # setup local variables for hooks
-    current_source_url="$pkg_source_url"
-    current="$(dirname $(readlink -f $build_file))"
-    sources_root="${SRC_ROOT}"
-    current_source_root="${SRC_ROOT}/${pkg_name}"
-    current_work_root=$(compute_build_work_root "$build_file") || {
-        fail_build_package "compute_build_work_root for '$build_file' failed"
-        return 1
-    }
-    current_build_id=$(build_id_from_work_root "$current_work_root") || {
-        fail_build_package ""
-        return 1
-    }
     if [ "x${builder_no_cache:-false}" != "xtrue" ] && [ "x${builder_force_rebuild:-false}" != "xtrue" ]; then
         if restore_artifact_cache "$current_build_id" "$pkg_name"; then
             restore_xcompile_flags
@@ -1855,16 +1822,8 @@ build_package() {
         }
         target_root_prefix_without_pkgname="${current_work_root}/install/dist.${OHOS_CPU}"
         target_root_with_pkgname="$(get_pkg_install_dir "$pkg_name")"
-        if [ "x${builder_no_cache:-false}" != "xtrue" ] && [ "x${builder_force_rebuild:-false}" != "xtrue" ]; then
-            if restore_artifact_cache "$current_build_id" "$pkg_name"; then
-                restore_xcompile_flags
-                clear_vars
-                info "Build $build_file completed from cache"
-                return 0
-            fi
-        fi
-        mkdir -p "$current_work_root"
-        rm -rf "${target_root_prefix_without_pkgname}" "${target_root_with_pkgname}"
+        info "build fingerprint changed after source preparation; retrying with lock for $(basename "$current_work_root")"
+        return "$build_lock_retry_rc"
     fi
 
     local legacy_source_root="$current_source_root"
@@ -1922,6 +1881,77 @@ build_package() {
     clear_vars
     info "Build $build_file completed"
     return 0
+}
+
+build_package() {
+    local build_file="${1:-}"
+
+    [[ ! -f "$build_file" ]] && error "BUILD file not found: $build_file" && return 1
+
+    info "========================================"
+    info "Processing: $build_file"
+    info "========================================"
+
+    clear_vars
+    save_xcompile_flags
+
+    # setup dependencies for native binaries & libraries
+    PATH="${native_dst_root}/bin:$PATH"
+    LD_LIBRARY_PATH="${native_dst_root}/lib:$LD_LIBRARY_PATH"
+
+    post_configure_hook() { :; }
+    current_source_url=""
+    current=""
+    sources_root=""
+    current_source_root=""
+    current_build_root=""
+    target_root_prefix_without_pkgname=""
+    target_root_with_pkgname=""
+    current_source_fresh=false
+    current_build_id=""
+    current_work_root=""
+
+    source "$build_file"
+    setup || { fail_build_package "setup() failed"; return 1; }
+    validate_config || { fail_build_package ""; return 1; }
+
+    # setup local variables for hooks
+    current_source_url="$pkg_source_url"
+    current="$(dirname $(readlink -f $build_file))"
+    sources_root="${SRC_ROOT}"
+    current_source_root="${SRC_ROOT}/${pkg_name}"
+    current_work_root=$(compute_build_work_root "$build_file") || {
+        fail_build_package "compute_build_work_root for '$build_file' failed"
+        return 1
+    }
+    current_build_id=$(build_id_from_work_root "$current_work_root") || {
+        fail_build_package ""
+        return 1
+    }
+
+    local lock_name lock_rc
+    while true; do
+        lock_name=$(build_package_lock_name) || {
+            fail_build_package "build lock name for '$build_file' failed"
+            return 1
+        }
+        if declare -F with_ohloha_lock >/dev/null 2>&1; then
+            if with_ohloha_lock "$lock_name" build_package_locked "$build_file"; then
+                return 0
+            else
+                lock_rc=$?
+            fi
+        elif build_package_locked "$build_file"; then
+            return 0
+        else
+            lock_rc=$?
+        fi
+
+        if [ "$lock_rc" -eq "$build_lock_retry_rc" ]; then
+            continue
+        fi
+        return "$lock_rc"
+    done
 }
 
 # NOTE: we will not resolve dependencies here! Make sure BUILD_FILEs are already topologically sorted
