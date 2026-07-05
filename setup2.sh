@@ -150,8 +150,8 @@ fi
 
 ARCH=${OHOS_ARCH}
 
-SRC_ROOT=${CUR_DIR}/.staging
-mkdir -p ${SRC_ROOT}
+SRC_ROOT=${OHLOHA_ROOT}/legacy-src
+mkdir -p "${SRC_ROOT}"
 TARGET_ROOT=${CUR_DIR}/dist.${OHOS_CPU}
 TEST_DIR=${CUR_DIR}/test-only
 

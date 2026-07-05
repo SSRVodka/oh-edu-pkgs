@@ -41,7 +41,7 @@
 
 这些目录/文件主要由构建流程生成或缓存，通常不要手动维护、提交或基于它们推断源码状态：
 
-- `.staging/`：目标源码缓存，源码目录为 `.staging/<pkg_name>`。
+- `.staging/`：旧源码缓存目录，当前构建流程不再把它作为源码状态来源；如本地残留，仅视为可删除的 legacy 生成物。
 - `.ohloha/native/sources/`、`.ohloha/native/dst/`：native/host 构建缓存和工具输出。`native_sources_root`、`native_dst_root` 变量短期保留给旧 hook 使用，但路径不再指向旧 `.staging.*`。
 - `dist.<cpu>.<pkg>`：legacy 单包目标输出目录，例如 `dist.aarch64.openssl`。当前构建先安装到 `.ohloha/work/<build-id>/install/` 下的临时前缀，成功后再发布到该 legacy 目录。
 - `dist.<cpu>`：旧共享中间安装前缀；新默认 helper 不应继续把当前包安装到这里。
@@ -161,7 +161,7 @@
 
 - `native_env_hook`：在 `setup2.sh` 加载前执行，只能使用 `native_project_root`、`native_sources_root`、`native_dst_root` 等早期变量。
 - `custom_download_source`：自定义源码获取。若设置 `_custom_download_source_continue=false`，必须保证源码已放到 `${current_source_root}`。
-- `prebuilt_patch_once_hook`：源码目录首次 patch 时执行，完成后会打 `PATCHED_BY_OHLOHA` 标记。
+- `prebuilt_patch_once_hook`：在生成当前包/版本 patched source snapshot 前执行一次；不再依赖 `PATCHED_BY_OHLOHA` 标记。
 - `prebuilt_patch_hook`：每次构建前执行，适合幂等 patch。
 - `custom_build`：自定义或补充构建。设置 `_custom_build_continue=false` 可跳过内置构建流程。
 - `post_configure_hook`：内置构建流程完成配置/生成后、真正编译前执行。autotools 中位于 `configure` 后和 `make` 前；CMake 中位于配置命令后和 `cmake --build` 前；Meson 中位于 `meson setup` 后和 `ninja` 前。`pkg_build_type="custom"` 时不会执行；`custom_build` 设置 `_custom_build_continue=false` 跳过默认构建路径时，也不会由默认路径执行。此时可使用 `${current_build_root}` 定位生成的构建目录。
@@ -209,6 +209,7 @@ fi
 - 新设计以 `builder.sh --print-meta` 和未来的 `PKG_INDEX.json` 为准。`PKG_INDEX.json` 应记录 `build_file`、版本、依赖、构建类型、source URL、patch 文件等机器可读信息。
 - `VERSION` 和 `VERSIONS` 属于旧文本索引方案；新功能不要读取或扩展该格式。
 - 部署/打包脚本应读取 `PKG_INDEX.json` 或构建 artifact manifest，而不是依赖 `VERSION` / `VERSIONS` 的列位置。
+- `gen-versions.sh` 已删除；不要恢复旧文本清单生成链路。
 
 ## 修改和验证流程
 

@@ -84,7 +84,7 @@
   sysroot-overlay/
 ```
 
-现有 legacy 目录在迁移期只作为旧产物识别，不作为新设计目标：
+现有 legacy 目录只作为旧产物识别，不作为新设计目标：
 
 - `.staging/`
 - `.staging.native/`
@@ -95,7 +95,7 @@
 - `crossenv_<cpu>/`
 - `.ohloha/meson-cross/`
 
-最终目标是让 `.staging/<pkg>` 不再作为长期复用的构建工作区；`.staging.native/` 和 `.staging.ndst/` 也不再作为 native/host 缓存路径。`native_sources_root`、`native_dst_root` 变量可短期保留给旧 hook 使用，但应指向 `.ohloha/native/sources` 和 `.ohloha/native/dst`。
+`.staging/<pkg>` 不再作为长期复用的构建工作区；`.staging.native/` 和 `.staging.ndst/` 也不再作为 native/host 缓存路径。`native_sources_root`、`native_dst_root` 变量短期保留给旧 hook 使用，但应指向 `.ohloha/native/sources` 和 `.ohloha/native/dst`。
 
 ## 构建生命周期
 
@@ -148,7 +148,7 @@ target_root_with_pkgname=.ohloha/work/<build-id>/install/dist.<cpu>.<pkg>
 }
 ```
 
-没有 resolved map 时，可 fallback 到 legacy 路径，保持旧脚本可用。
+没有 resolved map 时，可 fallback 到 `dist.<cpu>.<pkg>` 兼容 alias，保持旧脚本可用。
 
 ## Native/Host 构建变量
 

@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 # Conventions
-# - current_source_root: ${SRC_ROOT}/<pkgname>
+# - current_source_root: package source directory for the current build phase
 # - target_root_with_pkgname: ${target_root_prefix_without_pkgname}.<pkgname>
 
 info () { printf "%b%s%b" "\E[1;34m [NATIVE] ❯ \E[1;36m" "${1:-}" "\E[0m\n"; }
@@ -729,12 +729,14 @@ publish_patched_source_snapshot() {
 
 prepare_work_source_root() {
     local build_file="${1:-}"
-    local fallback_source_root="${2:-}"
-    local source_root="$fallback_source_root"
+    local source_root=""
     local patched_dir
 
     if patched_dir=$(compute_patched_source_snapshot_dir "$build_file") && [ -d "$patched_dir" ]; then
         source_root="$patched_dir"
+    else
+        error "patched source snapshot not found for '$build_file'"
+        return 1
     fi
 
     if [ ! -d "$source_root" ]; then
@@ -757,6 +759,12 @@ prepare_work_source_root() {
 
     sources_root="$work_sources_root"
     current_source_root="$work_source_root"
+}
+
+set_prepatch_source_root() {
+    [ -n "${current_work_root:-}" ] || { error "current_work_root is empty"; return 1; }
+    sources_root="${current_work_root}/prepatch-src"
+    current_source_root="${sources_root}/${pkg_name}"
 }
 
 compute_build_work_root() {
@@ -1839,7 +1847,7 @@ build() {
     local current_build_file_dir=$(dirname $(readlink -f $current_build_file))
 
     local target="${pkg_name}"
-    local build_sources_root="${SRC_ROOT}"
+    local build_sources_root="${sources_root:-}"
     if [ -n "${current_source_root:-}" ]; then
         target=$(basename "$current_source_root")
         build_sources_root=$(dirname "$current_source_root")
@@ -1970,17 +1978,12 @@ build_package_locked() {
         fi
     fi
     mkdir -p "$current_work_root"
+    set_prepatch_source_root || { fail_build_package "set_prepatch_source_root for '$build_file' failed"; return 1; }
     target_root_prefix_without_pkgname="${current_work_root}/install/dist.${OHOS_CPU}"
     target_root_with_pkgname="$(get_pkg_install_dir "$pkg_name")"
-    rm -rf "${target_root_prefix_without_pkgname}" "${target_root_with_pkgname}"
+    rm -rf "${target_root_prefix_without_pkgname}" "${target_root_with_pkgname}" "${sources_root}"
 
-    # download if ${current_source_root} doesn't exist or flushed using optional pkg_force_clean_build
-    if [ -n "${pkg_force_clean_build:-}" ]; then
-        rm -rf "${current_source_root}"
-    fi
-    if [ ! -d "${current_source_root}" ]; then
-        download || { fail_build_package "download for '$build_file' failed"; return 1; }
-    fi
+    download || { fail_build_package "download for '$build_file' failed"; return 1; }
 
     local recomputed_work_root
     recomputed_work_root=$(compute_build_work_root "$build_file") || {
@@ -1995,23 +1998,21 @@ build_package_locked() {
         }
         target_root_prefix_without_pkgname="${current_work_root}/install/dist.${OHOS_CPU}"
         target_root_with_pkgname="$(get_pkg_install_dir "$pkg_name")"
+        set_prepatch_source_root || {
+            fail_build_package "set_prepatch_source_root for '$build_file' failed after fingerprint update"
+            return 1
+        }
         info "build fingerprint changed after source preparation; retrying with lock for $(basename "$current_work_root")"
         return "$build_lock_retry_rc"
     fi
 
-    local legacy_source_root="$current_source_root"
     print_vars
-    if [ ! -f "${current_source_root}/PATCHED_BY_OHLOHA" ]; then
-        prebuilt_patch_once_hook || { fail_build_package "prebuilt_patch_once_hook for '$build_file' failed"; return 1; }
-        touch "${current_source_root}/PATCHED_BY_OHLOHA"
-    fi
-    if [ "x${current_source_fresh:-false}" = "xtrue" ]; then
-        publish_patched_source_snapshot "$build_file" "$current_source_root" || {
-            fail_build_package "publish_patched_source_snapshot for '$build_file' failed"
-            return 1
-        }
-    fi
-    prepare_work_source_root "$build_file" "$legacy_source_root" || {
+    prebuilt_patch_once_hook || { fail_build_package "prebuilt_patch_once_hook for '$build_file' failed"; return 1; }
+    publish_patched_source_snapshot "$build_file" "$current_source_root" || {
+        fail_build_package "publish_patched_source_snapshot for '$build_file' failed"
+        return 1
+    }
+    prepare_work_source_root "$build_file" || {
         fail_build_package "prepare_work_source_root for '$build_file' failed"
         return 1
     }
@@ -2091,8 +2092,6 @@ build_package() {
     # setup local variables for hooks
     current_source_url="$pkg_source_url"
     current="$(dirname $(readlink -f $build_file))"
-    sources_root="${SRC_ROOT}"
-    current_source_root="${SRC_ROOT}/${pkg_name}"
     current_work_root=$(compute_build_work_root "$build_file") || {
         fail_build_package "compute_build_work_root for '$build_file' failed"
         return 1
@@ -2101,6 +2100,7 @@ build_package() {
         fail_build_package ""
         return 1
     }
+    set_prepatch_source_root || { fail_build_package "set_prepatch_source_root for '$build_file' failed"; return 1; }
 
     local lock_name lock_rc
     while true; do

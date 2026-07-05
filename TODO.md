@@ -33,8 +33,8 @@
 - [x] 新增 `TODO.md` 记录短中期目标。
 - [x] 新增 `DESIGN.md` 记录长期架构设计。
 - [x] 更新 `AGENTS.md`，提示上下文不明时先读 `TODO.md` 和 `DESIGN.md`。
-- [ ] 在每个阶段开始前检查 `git status --short`，记录并避开无关脏文件。
-- [ ] 每个阶段建议用独立 git commit 管理，commit 范围只覆盖该阶段目标。
+- [x] 在每个阶段开始前检查 `git status --short`，记录并避开无关脏文件。
+- [x] 每个阶段建议用独立 git commit 管理，commit 范围只覆盖该阶段目标。
 
 验收：
 
@@ -103,7 +103,7 @@
 - [x] 引入 `.ohloha/downloads/<source-key>.archive` 保存原始下载文件。
 - [x] 引入 `.ohloha/sources/<source-id>/clean` 保存干净解压源码。
 - [x] 引入 `.ohloha/sources/<patched-source-id>/patched` 保存应用包/版本 patch 后的源码快照。
-- [ ] 每次 cache miss 从 patched source snapshot 复制、硬链接或 reflink 到 `.ohloha/work/<build-id>/src-root/<pkg_name>`；当前已优先使用 snapshot，缺失 snapshot 时仍 fallback 到 legacy source。
+- [x] 每次 cache miss 从 patched source snapshot 复制、硬链接或 reflink 到 `.ohloha/work/<build-id>/src-root/<pkg_name>`；缺失 patched snapshot 时直接失败，不再 fallback 到 legacy source。
 - [x] `current_source_root` 指向 workdir 内源码副本。
 - [x] `sources_root` 指向 workdir 内 `src-root`，兼容现有 hook 中以 `${sources_root}` 为 patch 根的写法。
 - [x] `target_root_prefix_without_pkgname` 改为 workdir 内的临时安装前缀，不能再共享 `dist.<cpu>`。
@@ -237,7 +237,7 @@ boost/
 - [x] `ohla-tool` 打包时使用 resolved dependency list，而不是仅 `build_deps` 字符串。
 - [x] deploy 文件名包含版本、架构、API，保持与当前 `.pkg/.json` 规则兼容。
 - [x] 安装时可解析同名多版本或至少拒绝冲突。
-- [ ] `build_and_install.sh` 使用新的并发 xcompile 入口。
+- [x] `build_and_install.sh` 使用新的并发 xcompile 入口。
 
 验收：
 
@@ -250,13 +250,19 @@ boost/
 
 任务：
 
-- [ ] 废弃长期复用的 `.staging/<pkg>` 构建模型。
-- [ ] 废弃 `.staging.native/`、`.staging.ndst/` 作为 native/host 缓存路径；`native_sources_root`、`native_dst_root` 变量短期作为 hook API 保留，但路径迁移到 `.ohloha/native/`。
-- [ ] 废弃 `PATCHED_BY_OHLOHA` 作为源码缓存状态标记。
+- [x] 废弃长期复用的 `.staging/<pkg>` 构建模型。
+- [x] 废弃 `.staging.native/`、`.staging.ndst/` 作为 native/host 缓存路径；`native_sources_root`、`native_dst_root` 变量短期作为 hook API 保留，但路径迁移到 `.ohloha/native/`。
+- [x] 废弃 `PATCHED_BY_OHLOHA` 作为源码缓存状态标记。
 - [x] 废弃运行时生成并提交风险较高的 `meson-scripts/*.meson`。
 - [x] 废弃私有 patch 放在根目录 `patches/` 的写法。
 - [x] 删除或停止生成 `VERSION` / `VERSIONS` 文本索引，部署脚本改用 `PKG_INDEX.json` / artifact manifest。
-- [ ] 明确哪些 legacy 命令继续支持，哪些只保留一段迁移期。
+- [x] 明确哪些 legacy 命令继续支持，哪些只保留一段迁移期。
+
+当前 legacy 边界：
+
+- 继续支持：`./builder.sh <BUILD>...` 串行入口、旧 hook 变量名、`dist.<cpu>.<pkg>` 兼容 alias。
+- 不再支持：`gen-versions.sh`、手工维护 `VERSION` / `VERSIONS`、依赖 `.staging/<pkg>` 或 `PATCHED_BY_OHLOHA` 判断源码状态。
+- 迁移期保留但不应扩展：`SRC_ROOT` 变量和旧 `dist.<cpu>.<pkg>` alias；新逻辑应使用 `.ohloha/` work/source/artifact 目录和 resolved dependency map。
 
 验收：
 
