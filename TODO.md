@@ -211,7 +211,7 @@ boost/
 - [x] Go 的 `PackageInfo` 增加 `BuildFile`、`SourceURL`、`BuildType`、`SupportArchs`、`PatchFiles`。
 - [x] 新增 `PKG_INDEX.json` 或等价机器可读索引。
 - [x] 新增 `gen-pkg-index.sh` 生成 `PKG_INDEX.json`，作为替代 `VERSION` / `VERSIONS` 的机器可读索引入口。
-- [ ] 废弃 `gen-versions.sh` / `VERSION` / `VERSIONS` 文本索引，并将 Go 侧和部署脚本迁移到 `PKG_INDEX.json`。
+- [x] 废弃 `gen-versions.sh` / `VERSION` / `VERSIONS` 文本索引，并将 Go 侧和部署脚本迁移到 `PKG_INDEX.json`。
 - [x] 支持目录结构 `pkg/BUILD` 作为默认版本，`pkg/versions/<version>/BUILD` 作为额外版本。
 - [x] 支持用户请求 `openssl`、`openssl==3.0.14`、`openssl>=3,<4`。
 - [x] 依赖解析时选择满足约束的最高版本；冲突时输出明确诊断。
@@ -255,7 +255,7 @@ boost/
 - [ ] 废弃 `PATCHED_BY_OHLOHA` 作为源码缓存状态标记。
 - [x] 废弃运行时生成并提交风险较高的 `meson-scripts/*.meson`。
 - [x] 废弃私有 patch 放在根目录 `patches/` 的写法。
-- [ ] 删除或停止生成 `VERSION` / `VERSIONS` 文本索引，部署脚本改用 `PKG_INDEX.json` / artifact manifest。
+- [x] 删除或停止生成 `VERSION` / `VERSIONS` 文本索引，部署脚本改用 `PKG_INDEX.json` / artifact manifest。
 - [ ] 明确哪些 legacy 命令继续支持，哪些只保留一段迁移期。
 
 验收：

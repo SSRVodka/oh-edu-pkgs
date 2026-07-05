@@ -100,12 +100,6 @@
 ./test-build-all.sh
 ```
 
-生成旧版文本清单（deprecated）：
-
-```bash
-./gen-versions.sh
-```
-
 生成 JSON 包索引：
 
 ```bash
@@ -213,10 +207,8 @@ fi
 ## 版本和清单
 
 - 新设计以 `builder.sh --print-meta` 和未来的 `PKG_INDEX.json` 为准。`PKG_INDEX.json` 应记录 `build_file`、版本、依赖、构建类型、source URL、patch 文件等机器可读信息。
-- `VERSION` 和 `VERSIONS` 属于旧文本索引方案，后续可以删除或只作为迁移期产物；不要为了兼容它们牺牲代码正确性和简洁性。
-- 部署/打包脚本后续应读取 `PKG_INDEX.json` 或构建 artifact manifest，而不是依赖 `VERSION` / `VERSIONS` 的列位置。
-
-- `VERSION` 当前仍可能被旧脚本读取，但新功能不应继续扩展该格式。
+- `VERSION` 和 `VERSIONS` 属于旧文本索引方案；新功能不要读取或扩展该格式。
+- 部署/打包脚本应读取 `PKG_INDEX.json` 或构建 artifact manifest，而不是依赖 `VERSION` / `VERSIONS` 的列位置。
 
 ## 修改和验证流程
 
@@ -228,7 +220,7 @@ fi
 4. 优先使用 `pkg_build_*` 字段和 helper；只在必要时写 hook。
 5. 若新增包或修改依赖，检查 `test-deps.sh`。
 6. 能构建时至少运行目标包及其依赖的 `./builder.sh ...`；无法构建时说明缺失的环境、网络或 SDK 条件。
-7. 如需维护包清单，优先实现或刷新 JSON 包索引；只有处理旧脚本时才运行 `./gen-versions.sh`。
+7. 如需维护包清单，运行 `./gen-pkg-index.sh` 刷新 JSON 包索引；不要恢复 `VERSION` / `VERSIONS` 文本索引流程。
 
 提交前检查：
 
