@@ -30,7 +30,7 @@
 ## 代码质量要求
 
 - 重构必须按 `TODO.md` 的阶段边界推进，避免把 host 环境隔离、缓存、并发、多版本等大改混在一个不可验证的提交里。
-- 不得 overstate 已完成内容：代码入口、文档设计、单元测试、真实包迁移、远端全量构建验证是不同完成层级，提交说明和最终回复必须区分。
+- 不得 overstate 已完成内容：代码入口、文档设计、单元测试、额外版本目录迁移、远端全量构建验证是不同完成层级，提交说明和最终回复必须区分。
 - 保持向后兼容：旧的 `BUILD` hook 变量、旧的 `./builder.sh <BUILD>...` 用法、旧的 `dist.<cpu>.<pkg>` 输出在迁移期不能无说明破坏。
 - 优先写可验证的小改动。每次修改根脚本后至少执行 `bash -n builder.sh setup2.sh`；修改包脚本后执行 `bash -n <pkg>/BUILD`。
 - 不允许把生成物、缓存、远端编译产物、`.ohloha/`、`.staging*`、`dist*`、`crossenv_*`、`deploy/`、`meson-scripts/*.meson` 纳入提交。
@@ -48,7 +48,7 @@
 - `dist.<cpu>`：旧共享中间安装前缀；新默认 helper 不应继续把当前包安装到这里。
 - `dist.wheels/`、`crossenv_<cpu>/`、`deploy/`。
 - `.ohloha/meson-cross/`：由 `setup2.sh` 从 `meson-scripts/*.meson.template` 生成的运行时 Meson cross file 副本。`meson-scripts/` 下只维护模板，不应生成或提交可变 `.meson` 文件。
-- `PKG_INDEX.json`：用于替代 `VERSION` / `VERSIONS` 的机器可读包索引。它可以记录 `pkg/versions/<version>/BUILD` 额外版本入口，但当前真实包仍主要是 `<pkg>/BUILD` 单版本布局；不要把索引入口误写成“仓库已完成真实多版本包迁移”。`VERSION` / `VERSIONS` 文本清单视为旧方案，不需要为新重构保持兼容。
+- `PKG_INDEX.json`：用于替代 `VERSION` / `VERSIONS` 的机器可读包索引。它可以记录 `pkg/versions/<version>/BUILD` 额外版本入口；该目录结构就是多版本 BUILD 的承载方式。不要把“索引入口可识别额外版本目录”误写成“仓库已完成多版本端到端验收”。`VERSION` / `VERSIONS` 文本清单视为旧方案，不需要为新重构保持兼容。
 
 `.gitignore` 已覆盖上述大多数生成物。修改时优先触碰包目录、`patches/`、模板或根目录脚本。
 

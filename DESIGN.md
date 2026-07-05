@@ -415,8 +415,8 @@ legacy alias 可以是 symlink，也可以是 copy/atomic rename。为了兼容�
 当前实现边界：
 
 - Go 侧已经引入 `PackageID{Name, Version}`，索引中记录 `BuildFile`，resolver 能处理版本约束并选择满足约束的最高版本。
-- `gen-pkg-index.sh` 已预留 `pkg/versions/<version>/BUILD` 额外版本扫描入口，但当前仓库的真实包仍基本是 `<pkg>/BUILD` 单版本布局。
-- 不能把“代码能读取额外版本目录”表述为“多版本包管理已经完整落地”。完整落地还需要至少一个真实同名多版本包、对应依赖约束、构建、部署和安装验证。
+- `gen-pkg-index.sh` 已预留 `pkg/versions/<version>/BUILD` 额外版本扫描入口；这个目录结构就是多版本 BUILD 的承载方式。
+- 不能把“代码能读取额外版本目录”表述为“多版本包管理已经完整落地”。完整落地还需要至少一个现有包拥有额外版本目录，并完成对应依赖约束、构建、部署和安装验证。
 - 当前同一次 xcompile 依赖闭包内，同名包只选择一个版本；尚未实现同一闭包中隔离安装两个同名不同版本的模型。
 
 ## Go DAG 调度设计
@@ -441,6 +441,12 @@ builder.sh --build-one \
   --log-file=.ohloha/logs/<pkg-id>.log \
   <BUILD_FILE>
 ```
+
+worker 日志约定：
+
+- 每个 package/version/arch 构建任务必须独占一个日志文件，例如 `.ohloha/logs/aarch64/openssl/3.5.0/build.log`。
+- 并发 worker 的 stdout/stderr 不应直接混写到终端；终端只输出 concise 状态和对应日志路径。
+- 同名包多版本必须落到不同版本目录，避免错误排查时日志互相覆盖。
 
 并发安全资源：
 
