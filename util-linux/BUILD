@@ -105,6 +105,9 @@ fi
 prebuilt_patch_hook() {
 	# OHOS doesn't support mq_* (kernel message queue), versionsort, strvercomp
 	sed -i 's/versionsort/alphasort/g' ${current_source_root}/libmount/src/tab_parse.c
+	if ! grep -q '^#include <linux/sysinfo.h>' "${current_source_root}/lib/monotonic.c"; then
+		sed -i '/^#include <sys\/sysinfo.h>/a #include <linux/sysinfo.h>' "${current_source_root}/lib/monotonic.c"
+	fi
 }
 
 # Hook: same as `prebuilt_patch_hook` but executed once if the source directory is not changed (mark file PATCHED)

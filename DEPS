@@ -1,5 +1,5 @@
 # NOTE: this file only support Ubuntu < 26.04
-apt install -y lsb-release wget software-properties-common gnupg curl
+apt install -y lsb-release wget software-properties-common gnupg curl zstd
 apt install -y build-essential file patchelf bison flex nasm texinfo perl automake autoconf autopoint libtool libtool-bin m4 po4a
 # python deps
 # Change lzma-dev to liblzma-dev, libncurses5-dev to libncurses-dev, libreadline6-dev to libreadline-dev in ubuntu >= 26.04

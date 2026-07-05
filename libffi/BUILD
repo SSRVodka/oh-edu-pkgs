@@ -119,7 +119,45 @@ prebuilt_patch_once_hook() {
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 #  - You can ONLY use pushd to change your working directory and you are responsible to use popd to restore the old one before it returns
 custom_build() {
-	_custom_build_continue=true
+	local build_dir=""
+	local install_dir=""
+	local candidate
+
+	pushd "${current_source_root}"
+	bash ./autogen.sh
+	./configure \
+		--enable-shared \
+		--prefix="${target_root_prefix_without_pkgname}" \
+		--libdir="${target_root_prefix_without_pkgname}/${OHOS_LIBDIR}" \
+		--host="${OHOS_CPU}-linux-musl" \
+		--build="${BUILD_PLATFORM_TRIPLET}" \
+		--target="${OHOS_CPU}-linux-musl"
+
+	for candidate in "${current_source_root}"/*linux-musl; do
+		if [ -d "$candidate" ] && [ -f "$candidate/Makefile" ]; then
+			build_dir="$candidate"
+			break
+		fi
+	done
+	if [ -z "$build_dir" ]; then
+		echo "ERROR: libffi build directory not found"
+		popd
+		return 1
+	fi
+
+	make -C "$build_dir" -j"${pkg_build_parallism:-}"
+	make -C "$build_dir" install
+	popd
+
+	install_dir=$(get_pkg_install_dir "$pkg_name")
+	if [ -d "$install_dir" ]; then
+		cp -r "${target_root_prefix_without_pkgname}/"* "$install_dir"/
+		rm -rf "${target_root_prefix_without_pkgname}"
+	else
+		mv "${target_root_prefix_without_pkgname}" "$install_dir"
+	fi
+	patch_libdir_origin "$pkg_name"
+	_custom_build_continue=false
 }
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
