@@ -192,7 +192,7 @@ boost/
 - [x] 每个包日志写入 `.ohloha/logs/<pkg>-<version>-<arch>.log`。
 - [x] 终端输出只打印 concise 状态：running/cache-hit/success/failed/skipped。
 - [x] 节点失败后，将依赖它的后继节点标记为 skipped；`--keep-going` 允许继续构建尚未启动的无关分支。
-- [ ] 引入资源锁：download/source snapshot/patched source/artifact/build-id/host-venv 已有基础锁；python/crossenv exclusive lock 仍待补齐。
+- [x] 引入基础资源锁：download/source snapshot/patched source/artifact/build-id/host-venv/python-crossenv。
 
 验收：
 

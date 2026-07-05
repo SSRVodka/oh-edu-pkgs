@@ -28,6 +28,7 @@ builder_keep_failed_work=false
 resolved_deps_file=""
 # Internal retry code used when source preparation changes the final build id.
 build_lock_retry_rc=75
+pycrossenv_lock_dir=""
 
 native_project_root=$(dirname "$(readlink -f "$0")")
 ohloha_root=${native_project_root}/.ohloha
@@ -1615,16 +1616,41 @@ setup_pycrossenv() {
         set_meson_list $ms_sh "common_ld_flags" "$LDFLAGS"
     done
 
-    # this will modify envs like PATH, _PS
-    enter_pycrossenv
+    if [ -n "${pycrossenv_lock_dir:-}" ]; then
+        error "setup_pycrossenv called while another pycrossenv is active in this process"
+        return 1
+    fi
+    acquire_ohloha_lock "pycrossenv-${OHOS_CPU}" pycrossenv_lock_dir || return 1
+
+    # this will modify envs like PATH, _PS and use shared crossenv_${OHOS_CPU}
+    enter_pycrossenv || {
+        release_pycrossenv_lock
+        return 1
+    }
 
     # Set up Rust/PyO3/cc-rs/ASM cross-compilation env vars centrally.
     # Individual BUILD files no longer need to set these.
-    setup_rust_cross_compile
+    setup_rust_cross_compile || {
+        destroy_pycrossenv || true
+        return 1
+    }
 }
 
 destroy_pycrossenv() {
-    exit_pycrossenv
+    local rc=0
+
+    if declare -F deactivate >/dev/null 2>&1; then
+        exit_pycrossenv || rc=$?
+    fi
+    release_pycrossenv_lock || rc=$?
+    return "$rc"
+}
+
+release_pycrossenv_lock() {
+    if [ -n "${pycrossenv_lock_dir:-}" ]; then
+        release_ohloha_lock "$pycrossenv_lock_dir" || return 1
+        pycrossenv_lock_dir=""
+    fi
 }
 
 download() {
@@ -1772,6 +1798,7 @@ fail_build_package() {
     local message="${1:-}"
 
     [ -z "$message" ] || error "$message"
+    destroy_pycrossenv || true
     cleanup_failed_work_root
     restore_xcompile_flags
     clear_vars

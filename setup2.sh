@@ -26,28 +26,29 @@ export PIP_CACHE_DIR
 
 mkdir -p "${OHLOHA_LOCK_ROOT}" "${OHLOHA_TOOL_WRAPPER_ROOT}" "${PIP_CACHE_DIR}"
 
-with_ohloha_lock() {
+acquire_ohloha_lock() {
 	local lock_name="${1:?lock name is required}"
-	shift
-	local lock_dir="${OHLOHA_LOCK_ROOT}/${lock_name}.lock"
-	local pid_file="${lock_dir}/pid"
+	local out_var="${2:-}"
+	local acquired_lock_dir="${OHLOHA_LOCK_ROOT}/${lock_name}.lock"
+	local pid_file="${acquired_lock_dir}/pid"
 	local waited=0
 	local missing_pid_waits=0
-	while ! mkdir "${lock_dir}" 2>/dev/null; do
+
+	while ! mkdir "${acquired_lock_dir}" 2>/dev/null; do
 		local owner_pid=""
 		if [ -f "${pid_file}" ]; then
 			owner_pid=$(cat "${pid_file}" 2>/dev/null || true)
 		fi
 		if [ -n "${owner_pid}" ] && ! kill -0 "${owner_pid}" 2>/dev/null; then
 			warn "removing stale lock '${lock_name}' from pid ${owner_pid}"
-			rm -rf "${lock_dir}"
+			rm -rf "${acquired_lock_dir}"
 			continue
 		fi
 		if [ -z "${owner_pid}" ]; then
 			missing_pid_waits=$((missing_pid_waits + 1))
 			if [ "${missing_pid_waits}" -ge 5 ]; then
 				warn "removing stale lock '${lock_name}' without owner pid"
-				rm -rf "${lock_dir}"
+				rm -rf "${acquired_lock_dir}"
 				missing_pid_waits=0
 				continue
 			fi
@@ -61,11 +62,39 @@ with_ohloha_lock() {
 		sleep 1
 	done
 	printf '%s\n' "$$" > "${pid_file}"
-	trap 'rm -rf "${lock_dir}"' RETURN
+
+	if [ -n "${out_var}" ]; then
+		printf -v "${out_var}" '%s' "${acquired_lock_dir}"
+	else
+		printf '%s\n' "${acquired_lock_dir}"
+	fi
+}
+
+release_ohloha_lock() {
+	local lock_dir="${1:-}"
+
+	case "${lock_dir}" in
+		"${OHLOHA_LOCK_ROOT}"/*.lock)
+			rm -rf "${lock_dir}"
+			;;
+		"")
+			;;
+		*)
+			error "refusing to release unexpected lock path: ${lock_dir}"
+			return 1
+			;;
+	esac
+}
+
+with_ohloha_lock() {
+	local lock_name="${1:?lock name is required}"
+	shift
+	local lock_dir=""
 	local rc=0
+
+	acquire_ohloha_lock "${lock_name}" lock_dir || return 1
 	"$@" || rc=$?
-	rm -rf "${lock_dir}"
-	trap - RETURN
+	release_ohloha_lock "${lock_dir}" || return 1
 	return "$rc"
 }
 
