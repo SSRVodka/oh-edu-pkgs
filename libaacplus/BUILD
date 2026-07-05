@@ -105,8 +105,19 @@ fi
 
 # Hook: called before entering build dir
 prebuilt_patch_hook() {
-	# patch https to avoid 301
-	sed -i 's|http://\(.\+\)|https://\1|' ${current_source_root}/src/Makefile.am
+	# Upstream's build downloads this secondary 3GPP archive during make.
+	# Seed a verified mirror copy so transient 3gpp.org failures cannot leave
+	# a zero-byte zip that make treats as an existing target.
+	local zip_path="${current_source_root}/src/26410-800.zip"
+	local zip_tmp="${zip_path}.tmp"
+	local zip_sha256="4e7b3268b4e21a4dc2c88ee3af57c9115334d6b616a6e5f2e3f43643bf37b72f"
+	if [ -f "${zip_path}" ] && echo "${zip_sha256}  ${zip_path}" | sha256sum -c - >/dev/null 2>&1; then
+		return 0
+	fi
+	rm -f "${zip_path}" "${zip_tmp}"
+	wget -O "${zip_tmp}" "https://repo.nepustil.net/distfiles/26410-800.zip"
+	echo "${zip_sha256}  ${zip_tmp}" | sha256sum -c -
+	mv "${zip_tmp}" "${zip_path}"
 }
 
 # Hook: same as `prebuilt_patch_hook` but executed once if the source directory is not changed (mark file PATCHED)

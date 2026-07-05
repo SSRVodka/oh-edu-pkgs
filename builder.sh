@@ -2259,7 +2259,7 @@ main() {
         fi
     done
 
-    . cleanup.sh
+    . "${native_project_root}/cleanup.sh"
 
     info "========================================"
     info "Build Summary"
