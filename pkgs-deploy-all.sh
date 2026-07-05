@@ -21,21 +21,57 @@ if [ ! -d "$REPO_DIR" ]; then
 fi
 
 get_pkg_dst_dir() {
-    printf '%s.%s' "${TARGET_ROOT}" "$1"
+    local name="${1:-}"
+    local version="${2:-}"
+    local versioned="${TARGET_ROOT}.${name}-${version}"
+    local legacy="${TARGET_ROOT}.${name}"
+
+    if [ -n "$version" ] && [ -d "$versioned" ]; then
+        printf '%s' "$versioned"
+    else
+        printf '%s' "$legacy"
+    fi
 }
 
-python3 - "$PKG_INDEX_FILE" <<'PY' | while IFS=$'\t' read -r name version deps build_file; do
+python3 - "$PKG_INDEX_FILE" "${CUR_DIR}/.ohloha/artifacts" "${OHOS_CPU}" "${OHOS_SDK_API_VERSION}" <<'PY' | while IFS=$'\t' read -r name version deps build_file; do
 import json
+import os
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as f:
     packages = json.load(f)
 
+artifact_root = sys.argv[2]
+arch = sys.argv[3]
+ohos_api = sys.argv[4]
+resolved_deps = {}
+
+if os.path.isdir(artifact_root):
+    for root, dirs, files in os.walk(artifact_root):
+        if "manifest.json" not in files or "success" not in files:
+            continue
+        manifest_path = os.path.join(root, "manifest.json")
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+        except Exception:
+            continue
+        if manifest.get("arch") != arch or str(manifest.get("ohos_api", "")) != str(ohos_api):
+            continue
+        deps = manifest.get("dependency_artifacts")
+        if isinstance(deps, dict):
+            resolved_deps[(manifest.get("name"), manifest.get("version"))] = ",".join(sorted(str(name) for name in deps))
+
 for pkg in packages:
+    name = pkg["name"]
+    version = pkg["version"]
+    deps = resolved_deps.get((name, version))
+    if deps is None:
+        deps = ",".join(pkg.get("deps", []))
     print(
-        pkg["name"],
-        pkg["version"],
-        ",".join(pkg.get("deps", [])),
+        name,
+        version,
+        deps,
         pkg["build_file"],
         sep="\t",
     )
@@ -47,7 +83,7 @@ PY
     echo "build_file=$build_file"
     echo "-------------"
 
-    resd=$(get_pkg_dst_dir "$name")
+    resd=$(get_pkg_dst_dir "$name" "$version")
     if [ ! -d "${resd}" ]; then
         warn "cannot find package input for '$name': '$resd'"
         continue

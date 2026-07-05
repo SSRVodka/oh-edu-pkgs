@@ -15,7 +15,7 @@ trap cleanup EXIT
 printf '[\n' > "${TMP_FILE}"
 
 first=true
-for build_file in "${SCRIPT_DIR}"/*/BUILD; do
+while IFS= read -r build_file; do
     [ -f "${build_file}" ] || continue
     if [ "${first}" = true ]; then
         first=false
@@ -23,7 +23,12 @@ for build_file in "${SCRIPT_DIR}"/*/BUILD; do
         printf ',\n' >> "${TMP_FILE}"
     fi
     "${SCRIPT_DIR}/builder.sh" --print-meta "${build_file}" >> "${TMP_FILE}"
-done
+done < <(
+    {
+        find "${SCRIPT_DIR}" -mindepth 2 -maxdepth 2 -name BUILD -type f ! -path "${SCRIPT_DIR}/.*/*" -print
+        find "${SCRIPT_DIR}" -mindepth 4 -maxdepth 4 -path "${SCRIPT_DIR}/*/versions/*/BUILD" -type f ! -path "${SCRIPT_DIR}/.*/*" -print
+    } | sort -u
+)
 
 printf '\n]\n' >> "${TMP_FILE}"
 mv "${TMP_FILE}" "${INDEX_FILE}"

@@ -84,9 +84,76 @@ get_pkg_legacy_dst_dir() {
     printf '%s.%s' "${TARGET_ROOT}" "${1:-}"
 }
 
+get_pkg_versioned_dst_dir() {
+    local name="${1:-}"
+    local version="${2:-${pkg_version:-}}"
+
+    [ -n "$name" ] || return 1
+    [ -n "$version" ] || return 1
+    printf '%s.%s-%s' "${TARGET_ROOT}" "$name" "$version"
+}
+
+get_resolved_pkg_dst_dir() {
+    local name="${1:-}"
+
+    [ -n "$name" ] || return 1
+    [ -n "${resolved_deps_file:-}" ] || return 1
+    [ -f "${resolved_deps_file:-}" ] || return 1
+
+    python3 - "$resolved_deps_file" "$name" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+name = sys.argv[2]
+try:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+except Exception:
+    sys.exit(1)
+
+if isinstance(data, dict):
+    paths = data.get("dependency_paths")
+    if isinstance(paths, dict) and isinstance(paths.get(name), str) and paths[name]:
+        print(paths[name])
+        sys.exit(0)
+
+    deps = data.get("dependencies")
+    if isinstance(deps, list):
+        for dep in deps:
+            if not isinstance(dep, dict) or str(dep.get("name", "")) != name:
+                continue
+            for key in ("path", "prefix", "dist_dir"):
+                value = dep.get(key)
+                if isinstance(value, str) and value:
+                    print(value)
+                    sys.exit(0)
+
+    artifacts = data.get("dependency_artifacts")
+    if isinstance(artifacts, dict):
+        value = artifacts.get(name)
+        if isinstance(value, dict):
+            for key in ("path", "prefix", "dist_dir"):
+                path_value = value.get(key)
+                if isinstance(path_value, str) and path_value:
+                    print(path_value)
+                    sys.exit(0)
+
+sys.exit(1)
+PY
+}
+
 get_pkg_dst_dir() {
     local name="${1:-}"
     local work_dst=""
+    local resolved_dst=""
+
+    if resolved_dst=$(get_resolved_pkg_dst_dir "$name" 2>/dev/null); then
+        if [ -n "$resolved_dst" ]; then
+            printf '%s' "$resolved_dst"
+            return 0
+        fi
+    fi
 
     if [ -n "${target_root_prefix_without_pkgname:-}" ]; then
         work_dst="${target_root_prefix_without_pkgname}.${name}"
@@ -215,6 +282,41 @@ publish_prepared_pkg_to_legacy_dst() {
     cp -a "$_pkg_src" "$_tmp_dst"
     rm -rf "$_pkg_dst"
     mv "$_tmp_dst" "$_pkg_dst"
+}
+
+publish_prepared_pkg_to_versioned_dst() {
+    local _pkg_name="${1:-${pkg_name:-}}"
+    local _pkg_version="${2:-${pkg_version:-}}"
+    local _pkg_src="${3:-}"
+    local _pkg_dst _tmp_dst
+
+    [ -n "$_pkg_name" ] || { error "publish_prepared_pkg_to_versioned_dst: empty package name"; return 1; }
+    [ -n "$_pkg_version" ] || { error "publish_prepared_pkg_to_versioned_dst: empty package version"; return 1; }
+    [ -n "$_pkg_src" ] || { error "publish_prepared_pkg_to_versioned_dst: empty source path"; return 1; }
+    if [ ! -d "$_pkg_src" ]; then
+        error "publish_prepared_pkg_to_versioned_dst: source directory not found: '$_pkg_src'"
+        return 1
+    fi
+
+    _pkg_dst=$(get_pkg_versioned_dst_dir "$_pkg_name" "$_pkg_version")
+    if [ "$(readlink -f "$_pkg_src")" = "$(readlink -m "$_pkg_dst")" ]; then
+        return 0
+    fi
+
+    _tmp_dst="${_pkg_dst}.tmp.$$"
+    rm -rf "$_tmp_dst"
+    cp -a "$_pkg_src" "$_tmp_dst"
+    rm -rf "$_pkg_dst"
+    mv "$_tmp_dst" "$_pkg_dst"
+}
+
+publish_prepared_pkg_to_dist_dirs() {
+    local _pkg_name="${1:-${pkg_name:-}}"
+    local _pkg_version="${2:-${pkg_version:-}}"
+    local _pkg_src="${3:-}"
+
+    publish_prepared_pkg_to_versioned_dst "$_pkg_name" "$_pkg_version" "$_pkg_src" || return 1
+    publish_prepared_pkg_to_legacy_dst "$_pkg_name" "$_pkg_src" || return 1
 }
 
 publish_pkg_to_legacy_dst() {
@@ -364,6 +466,46 @@ json_csv_array() {
         done
         IFS="$old_ifs"
     fi
+    printf ']'
+}
+
+json_dependency_csv_array() {
+    local csv="${1:-}"
+    local first=true item current=""
+
+    emit_dependency_item() {
+        [ -n "$current" ] || return 0
+        if [ "$first" = true ]; then
+            first=false
+        else
+            printf ','
+        fi
+        json_string "$current"
+    }
+
+    printf '['
+    if [ -n "$csv" ]; then
+        local old_ifs="$IFS"
+        IFS=','
+        for item in $csv; do
+            [ -n "$item" ] || continue
+            case "$item" in
+                '>'*|'<'*|'=='*)
+                    if [ -n "$current" ]; then
+                        current="${current},${item}"
+                    else
+                        current="$item"
+                    fi
+                    ;;
+                *)
+                    emit_dependency_item
+                    current="$item"
+                    ;;
+            esac
+        done
+        IFS="$old_ifs"
+    fi
+    emit_dependency_item
     printf ']'
 }
 
@@ -934,17 +1076,19 @@ verify_artifact_cache() {
 restore_artifact_cache_unlocked() {
     local build_id="${1:-${current_build_id:-}}"
     local pkg="${2:-${pkg_name:-}}"
-    local artifact_dir payload_path dst tmp_dst path_component
+    local version="${3:-${pkg_version:-}}"
+    local artifact_dir payload_path canonical_dst tmp_dst path_component
 
     [ -n "$pkg" ] || { error "restore_artifact_cache: empty package name"; return 1; }
+    [ -n "$version" ] || { error "restore_artifact_cache: empty package version"; return 1; }
     if ! verify_artifact_cache "$build_id"; then
         return 1
     fi
 
     artifact_dir=$(get_artifact_dir "$build_id") || return 1
     payload_path="${artifact_dir}/payload.tar.zst"
-    dst=$(get_pkg_legacy_dst_dir "$pkg")
-    tmp_dst="${dst}.tmp.$$"
+    canonical_dst=$(get_pkg_versioned_dst_dir "$pkg" "$version")
+    tmp_dst="${canonical_dst}.tmp.$$"
     path_component=$(artifact_path_component_for_build_id "$build_id") || return 1
 
     rm -rf "$tmp_dst"
@@ -953,24 +1097,26 @@ restore_artifact_cache_unlocked() {
         rm -rf "$tmp_dst"
         return 1
     fi
-    rm -rf "$dst"
-    if ! mv "$tmp_dst" "$dst"; then
+    rm -rf "$canonical_dst"
+    if ! mv "$tmp_dst" "$canonical_dst"; then
         rm -rf "$tmp_dst"
         return 1
     fi
+    publish_prepared_pkg_to_legacy_dst "$pkg" "$canonical_dst" || return 1
     info "cache hit: ${path_component}"
 }
 
 restore_artifact_cache() {
     local build_id="${1:-${current_build_id:-}}"
     local pkg="${2:-${pkg_name:-}}"
+    local version="${3:-${pkg_version:-}}"
     local path_component
 
     path_component=$(artifact_path_component_for_build_id "$build_id") || return 1
     if declare -F with_ohloha_lock >/dev/null 2>&1; then
-        with_ohloha_lock "artifact-${path_component}" restore_artifact_cache_unlocked "$build_id" "$pkg"
+        with_ohloha_lock "artifact-${path_component}" restore_artifact_cache_unlocked "$build_id" "$pkg" "$version"
     else
-        restore_artifact_cache_unlocked "$build_id" "$pkg"
+        restore_artifact_cache_unlocked "$build_id" "$pkg" "$version"
     fi
 }
 
@@ -1238,8 +1384,8 @@ print_package_meta() {
     printf '  "name": '; json_string "${pkg_name:-}"; printf ',\n'
     printf '  "version": '; json_string "${pkg_version:-}"; printf ',\n'
     printf '  "build_file": '; json_string "$rel_build_file"; printf ',\n'
-    printf '  "deps": '; json_csv_array "${pkg_deps:-}"; printf ',\n'
-    printf '  "build_deps": '; json_csv_array "${pkg_build_deps:-}"; printf ',\n'
+    printf '  "deps": '; json_dependency_csv_array "${pkg_deps:-}"; printf ',\n'
+    printf '  "build_deps": '; json_dependency_csv_array "${pkg_build_deps:-}"; printf ',\n'
     printf '  "source_url": '; json_string "${pkg_source_url:-}"; printf ',\n'
     printf '  "release_url": '; json_string "${pkg_release_url:-}"; printf ',\n'
     printf '  "license": '; json_string "${pkg_license:-}"; printf ',\n'
@@ -1332,8 +1478,8 @@ print_package_cache_key() {
     printf '  "arch": '; json_string "${OHOS_CPU:-}"; printf ',\n'
     printf '  "ohos_api": '; json_string "${OHOS_SDK_API_VERSION:-}"; printf ',\n'
     printf '  "source_archive_sha256": '; json_string "$source_archive_sha256"; printf ',\n'
-    printf '  "deps": '; json_csv_array "${pkg_deps:-}"; printf ',\n'
-    printf '  "build_deps": '; json_csv_array "${pkg_build_deps:-}"; printf ',\n'
+    printf '  "deps": '; json_dependency_csv_array "${pkg_deps:-}"; printf ',\n'
+    printf '  "build_deps": '; json_dependency_csv_array "${pkg_build_deps:-}"; printf ',\n'
     printf '  "patch_files": '; json_csv_array "${pkg_patch_files:-}"; printf ',\n'
     printf '  "dependency_artifacts": '; json_dependency_artifacts_object "$dependency_artifacts"; printf ',\n'
     printf '  "files": '; json_file_hash_object "$file_hashes"; printf '\n'
@@ -1816,7 +1962,7 @@ build_package_locked() {
     local build_file="${1:-}"
 
     if [ "x${builder_no_cache:-false}" != "xtrue" ] && [ "x${builder_force_rebuild:-false}" != "xtrue" ]; then
-        if restore_artifact_cache "$current_build_id" "$pkg_name"; then
+        if restore_artifact_cache "$current_build_id" "$pkg_name" "$pkg_version"; then
             restore_xcompile_flags
             clear_vars
             info "Build $build_file completed from cache"
@@ -1886,8 +2032,8 @@ build_package_locked() {
 	done
 
     local publish_payload_dir
-    publish_payload_dir="${current_work_root}/publish/dist.${OHOS_CPU}.${pkg_name}"
-    prepare_pkg_for_legacy_dst "$pkg_name" "$target_root_with_pkgname" "$publish_payload_dir" "$(get_pkg_legacy_dst_dir "$pkg_name")" || {
+    publish_payload_dir="${current_work_root}/publish/dist.${OHOS_CPU}.${pkg_name}-${pkg_version}"
+    prepare_pkg_for_legacy_dst "$pkg_name" "$target_root_with_pkgname" "$publish_payload_dir" "$(get_pkg_versioned_dst_dir "$pkg_name" "$pkg_version")" || {
         fail_build_package "prepare_pkg_for_legacy_dst for '$build_file' failed"
         return 1
     }
@@ -1899,8 +2045,8 @@ build_package_locked() {
         }
     fi
 
-    publish_prepared_pkg_to_legacy_dst "$pkg_name" "$publish_payload_dir" || {
-        fail_build_package "publish_prepared_pkg_to_legacy_dst for '$build_file' failed"
+    publish_prepared_pkg_to_dist_dirs "$pkg_name" "$pkg_version" "$publish_payload_dir" || {
+        fail_build_package "publish_prepared_pkg_to_dist_dirs for '$build_file' failed"
         return 1
     }
 

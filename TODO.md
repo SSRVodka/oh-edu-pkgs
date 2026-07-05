@@ -187,7 +187,7 @@ boost/
 
 - [x] 在父目录 Go 项目中新增 `ohla xcompile --jobs <N>`。
 - [x] 把当前拓扑排序扩展为 ready queue + worker pool。
-- [ ] 节点单位从包名逐步迁移为 `PackageID`。
+- [x] 节点单位从包名逐步迁移为 `PackageID`。
 - [x] worker 调用 `builder.sh --build-one --cpu=<cpu> <BUILD_FILE>`。
 - [x] 每个包日志写入 `.ohloha/logs/<pkg>-<version>-<arch>.log`。
 - [x] 终端输出只打印 concise 状态：running/cache-hit/success/failed/skipped。
@@ -207,16 +207,18 @@ boost/
 
 任务：
 
-- [ ] 引入 `PackageID{Name, Version}`。
-- [ ] Go 的 `PackageInfo` 增加 `BuildFile`、`SourceURL`、`BuildType`、`SupportArchs`、`PatchFiles`。
-- [ ] 新增 `PKG_INDEX.json` 或等价机器可读索引。
+- [x] 引入 `PackageID{Name, Version}`。
+- [x] Go 的 `PackageInfo` 增加 `BuildFile`、`SourceURL`、`BuildType`、`SupportArchs`、`PatchFiles`。
+- [x] 新增 `PKG_INDEX.json` 或等价机器可读索引。
 - [x] 新增 `gen-pkg-index.sh` 生成 `PKG_INDEX.json`，作为替代 `VERSION` / `VERSIONS` 的机器可读索引入口。
 - [ ] 废弃 `gen-versions.sh` / `VERSION` / `VERSIONS` 文本索引，并将 Go 侧和部署脚本迁移到 `PKG_INDEX.json`。
-- [ ] 支持目录结构 `pkg/BUILD` 作为默认版本，`pkg/versions/<version>/BUILD` 作为额外版本。
-- [ ] 支持用户请求 `openssl`、`openssl==3.0.14`、`openssl>=3,<4`。
-- [ ] 依赖解析时选择满足约束的最高版本；冲突时输出明确诊断。
-- [ ] `get_pkg_dst_dir <name>` 根据 resolved-deps map 返回具体版本的 dist 路径。
-- [ ] 真实输出目录使用 `dist.<cpu>.<name>-<version>`；`dist.<cpu>.<name>` 作为兼容 alias 或当前选择版本。
+- [x] 支持目录结构 `pkg/BUILD` 作为默认版本，`pkg/versions/<version>/BUILD` 作为额外版本。
+- [x] 支持用户请求 `openssl`、`openssl==3.0.14`、`openssl>=3,<4`。
+- [x] 依赖解析时选择满足约束的最高版本；冲突时输出明确诊断。
+- [x] `get_pkg_dst_dir <name>` 根据 resolved-deps map 返回具体版本的 dist 路径。
+- [x] 真实输出目录使用 `dist.<cpu>.<name>-<version>`；`dist.<cpu>.<name>` 作为兼容 alias 或当前选择版本。
+
+当前实现说明：同一次 xcompile 依赖闭包内，同名包只选择一个满足全部约束的版本；如果约束不可同时满足则报错。尚未实现同一闭包内并存两个同名不同版本的隔离安装模型。
 
 验收：
 
@@ -231,7 +233,7 @@ boost/
 任务：
 
 - [x] `pkgs-deploy-all.sh` 支持从 `PKG_INDEX.json` 部署，不再读取 `VERSION` / `VERSIONS`。
-- [ ] `pkgs-deploy-all.sh` 进一步改为优先读取 artifact manifest 中的 resolved dependency list。
+- [x] `pkgs-deploy-all.sh` 进一步改为优先读取 artifact manifest 中的 resolved dependency list。
 - [ ] `ohla-tool` 打包时使用 resolved dependency list，而不是仅 `build_deps` 字符串。
 - [ ] deploy 文件名包含版本、架构、API，保持与当前 `.pkg/.json` 规则兼容。
 - [ ] 安装时可解析同名多版本或至少拒绝冲突。
@@ -252,7 +254,7 @@ boost/
 - [ ] 废弃 `.staging.native/`、`.staging.ndst/` 作为 native/host 缓存路径；`native_sources_root`、`native_dst_root` 变量短期作为 hook API 保留，但路径迁移到 `.ohloha/native/`。
 - [ ] 废弃 `PATCHED_BY_OHLOHA` 作为源码缓存状态标记。
 - [x] 废弃运行时生成并提交风险较高的 `meson-scripts/*.meson`。
-- [ ] 废弃私有 patch 放在根目录 `patches/` 的写法。
+- [x] 废弃私有 patch 放在根目录 `patches/` 的写法。
 - [ ] 删除或停止生成 `VERSION` / `VERSIONS` 文本索引，部署脚本改用 `PKG_INDEX.json` / artifact manifest。
 - [ ] 明确哪些 legacy 命令继续支持，哪些只保留一段迁移期。
 
