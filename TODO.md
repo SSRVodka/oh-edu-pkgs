@@ -158,10 +158,10 @@ fingerprint 至少包含：
 - [x] 新增 `pkg_patch_files` 变量或等价机制，允许 BUILD 显式声明 patch 文件。
 - [x] 新增 helper：`get_pkg_patch_files`、`apply_pkg_patches`、`apply_pkg_git_patches`。
 - [x] 约定私有 patch 放入 `<pkg>/patches/<pkg_version>/`；`pkg_patch_files="patches/${pkg_version}/..."` 相对当前包目录解析。
-- [ ] 根目录 `patches/` 只保留真正跨包共享的 patch，或迁移为 `patches/shared/`。
-- [ ] 逐步迁移当前根目录私有 patch，例如 `oh-grpc.patch`、`oh-curl.patch`、`oh-openjdk21.0.10+35.patch`。已迁移 `bash`、`boost`。
+- [x] 根目录 `patches/` 只保留真正跨包共享的 patch；当前没有需要保留的共享 patch 文件。
+- [x] 逐步迁移当前根目录私有 patch，例如 `oh-grpc.patch`、`oh-curl.patch`、`oh-openjdk21.0.10+35.patch`；当前已迁移所有仍被 `BUILD` 引用的私有 patch。
 - [x] 新增 `lint-patches.sh`，检查 patch 引用、归属和废弃全局路径。
-- [ ] 缓存 fingerprint 从 hash 整个根 `patches/` 过渡为 hash 当前包声明的 patch 文件。
+- [x] 缓存 fingerprint 从 hash 整个根 `patches/` 过渡为 hash 当前包声明或兼容检测到的 patch 文件。
 
 推荐结构：
 

@@ -12,7 +12,7 @@ setup() {
 # TODO: please fill in the variables for this package
 
 # [REQUIRED, NON-EMPTY, SEMVER]
-pkg_version="1.74.1"
+pkg_version="1.78.1"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
 pkg_name="grpc"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
@@ -39,6 +39,10 @@ pkg_support_archs="x86_64,aarch64,arm"
 pkg_build_type="cmake"
 # [OPTIONAL]
 pkg_build_parallism="20"
+# [OPTIONAL: empty or Y]
+pkg_force_clean_build=""
+# [OPTIONAL, separated by commas, NO-SPACE]. Relative paths are resolved from this package directory, then repo root.
+pkg_patch_files="patches/${pkg_version}/0001-add-openharmony-platform-support.patch"
 
 ####### build type related (all OPTIONAL) #######
 
@@ -49,7 +53,7 @@ pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
 pkg_build_autotools_make_install_target=""
 
-pkg_build_cmake_extra_cmake_flags="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DOHOS_ALLOW_UNDEFINED_SYMBOLS=ON -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_CXX_STANDARD=17 -DABSL_PROPAGATE_CXX_STD=ON -DgRPC_ZLIB_PROVIDER=package -DgRPC_SSL_PROVIDER=package -DgRPC_INSTALL=ON -DgRPC_INSTALL_LIBDIR=${OHOS_LIBDIR} -DgRPC_INSTALL_CMAKEDIR=${OHOS_LIBDIR}/cmake/grpc"
+pkg_build_cmake_extra_cmake_flags="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DOHOS_ALLOW_UNDEFINED_SYMBOLS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_CXX_STANDARD=17 -DABSL_PROPAGATE_CXX_STD=ON -DgRPC_ZLIB_PROVIDER=package -DgRPC_SSL_PROVIDER=package -DgRPC_INSTALL=ON -DgRPC_INSTALL_LIBDIR=${OHOS_LIBDIR} -DgRPC_INSTALL_CMAKEDIR=${OHOS_LIBDIR}/cmake/grpc"
 pkg_build_cmake_extra_cmake_prefix_path=""
 pkg_build_cmake_extra_cflags=""
 # NOTE: C preprocessor not CXX
@@ -129,6 +133,9 @@ native_env_hook() {
 		git clone -b v${pkg_version} ${pkg_source_url} ${grpc_native_src_root}
 		pushd ${grpc_native_src_root}
 		git submodule update --init
+		pushd third_party/protobuf
+		git checkout v33.5
+		popd
 		popd
 	fi
 
@@ -143,8 +150,8 @@ native_env_hook() {
 	mkdir -p ${native_dst_root}/bin
 	cp -P ${grpc_native_src_root}/native-build/grpc_*_plugin \
 		${grpc_native_src_root}/native-build/third_party/protobuf/protoc* \
-		${grpc_native_src_root}/native-build/third_party/cares/cares/bin/* \
 		${native_dst_root}/bin
+		#${grpc_native_src_root}/native-build/third_party/cares/cares/bin/* \
 }
 
 # Hook: customize downloading source process. called when pacakge manager is downloading the source.
@@ -158,6 +165,9 @@ custom_download_source() {
 		git clone -b v${pkg_version} ${pkg_source_url} ${current_source_root}
 		pushd ${current_source_root}
 		git submodule update --init
+		pushd third_party/protobuf
+		git checkout v33.5
+		popd
 		popd
 	fi
 
@@ -178,8 +188,7 @@ prebuilt_patch_hook() {
 # Hook: same as `prebuilt_patch_hook` but executed once if the source directory is not changed (mark file PATCHED)
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
-	git -C ${current_source_root} apply --check ${PATCH_FILE_ROOT}/oh-grpc.patch
-	git -C ${current_source_root} apply ${PATCH_FILE_ROOT}/oh-grpc.patch
+	apply_pkg_git_patches
 }
 
 # Hook: customize building process.
