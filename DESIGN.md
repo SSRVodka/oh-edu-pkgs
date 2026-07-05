@@ -370,7 +370,7 @@ apply_pkg_git_patches
 
 ## 多版本模型
 
-未来包节点不是单纯的包名，而是：
+目标状态下，包节点不是单纯的包名，而是：
 
 ```go
 type PackageID struct {
@@ -411,6 +411,13 @@ dist.<cpu>.<name>             # legacy alias/current selected version
 ```
 
 legacy alias 可以是 symlink，也可以是 copy/atomic rename。为了兼容部署脚本，迁移初期建议继续生成真实目录。
+
+当前实现边界：
+
+- Go 侧已经引入 `PackageID{Name, Version}`，索引中记录 `BuildFile`，resolver 能处理版本约束并选择满足约束的最高版本。
+- `gen-pkg-index.sh` 已预留 `pkg/versions/<version>/BUILD` 额外版本扫描入口，但当前仓库的真实包仍基本是 `<pkg>/BUILD` 单版本布局。
+- 不能把“代码能读取额外版本目录”表述为“多版本包管理已经完整落地”。完整落地还需要至少一个真实同名多版本包、对应依赖约束、构建、部署和安装验证。
+- 当前同一次 xcompile 依赖闭包内，同名包只选择一个版本；尚未实现同一闭包中隔离安装两个同名不同版本的模型。
 
 ## Go DAG 调度设计
 

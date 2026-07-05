@@ -205,6 +205,8 @@ boost/
 
 目标：同名包允许多个版本共存，依赖约束解析到具体版本。
 
+当前状态：已实现机器索引、`PackageID`、约束解析和 versioned dist 输出入口；但当前仓库的真实包仍基本都是 `<pkg>/BUILD` 单版本布局，尚未迁移或新增真实的 `<pkg>/versions/<version>/BUILD` 多版本样例。因此本里程碑不能视为完整验收完成。
+
 任务：
 
 - [x] 引入 `PackageID{Name, Version}`。
@@ -212,23 +214,27 @@ boost/
 - [x] 新增 `PKG_INDEX.json` 或等价机器可读索引。
 - [x] 新增 `gen-pkg-index.sh` 生成 `PKG_INDEX.json`，作为替代 `VERSION` / `VERSIONS` 的机器可读索引入口。
 - [x] 废弃 `gen-versions.sh` / `VERSION` / `VERSIONS` 文本索引，并将 Go 侧和部署脚本迁移到 `PKG_INDEX.json`。
-- [x] 支持目录结构 `pkg/BUILD` 作为默认版本，`pkg/versions/<version>/BUILD` 作为额外版本。
-- [x] 支持用户请求 `openssl`、`openssl==3.0.14`、`openssl>=3,<4`。
-- [x] 依赖解析时选择满足约束的最高版本；冲突时输出明确诊断。
+- [x] `gen-pkg-index.sh` 能扫描 `pkg/BUILD` 默认版本，并预留扫描 `pkg/versions/<version>/BUILD` 的索引入口。
+- [x] Go resolver 支持用户请求 `openssl`、`openssl==3.0.14`、`openssl>=3,<4` 这类约束语法。
+- [x] 依赖解析时选择满足约束的最高版本；冲突时输出明确诊断，错误信息需要保持多行可读。
 - [x] `get_pkg_dst_dir <name>` 根据 resolved-deps map 返回具体版本的 dist 路径。
 - [x] 真实输出目录使用 `dist.<cpu>.<name>-<version>`；`dist.<cpu>.<name>` 作为兼容 alias 或当前选择版本。
+- [ ] 迁移或新增至少一个真实包的额外版本，例如 `openssl/versions/<older-version>/BUILD`，用于验证同名多版本索引、解析、构建、部署链路。
+- [ ] 为多版本索引和真实额外版本补充端到端验证；不能只依赖单元测试或空目录约定。
 
-当前实现说明：同一次 xcompile 依赖闭包内，同名包只选择一个满足全部约束的版本；如果约束不可同时满足则报错。尚未实现同一闭包内并存两个同名不同版本的隔离安装模型。
+当前实现说明：同一次 xcompile 依赖闭包内，同名包只选择一个满足全部约束的版本；如果约束不可同时满足则报错。尚未实现同一闭包内并存两个同名不同版本的隔离安装模型。当前真实包目录仍以 `<pkg>/BUILD` 为主，不要把“代码入口可识别额外版本目录”表述为“仓库已经完成多版本包管理”。
 
 验收：
 
-- 同一仓库中可以同时存在 `openssl` 两个版本的 `BUILD`。
-- 依赖 `openssl<3.1` 的包和依赖 `openssl>=3.5` 的包在冲突时明确报错，或在可隔离场景下解析为不同 PackageID。
-- 旧包 hook 中的 `get_pkg_dst_dir openssl` 不需要立即全量改写。
+- [ ] 同一仓库中存在至少一个包的两个真实版本 `BUILD`，且 `PKG_INDEX.json` 同时记录二者。
+- [ ] 用户请求精确版本和版本范围时能解析到预期版本，并能实际构建或明确报出版本冲突。
+- [x] 旧包 hook 中的 `get_pkg_dst_dir openssl` 不需要立即全量改写。
 
 ## 里程碑 8：部署和安装链路适配
 
 目标：构建产物、多版本 artifact 和部署工具链保持一致。
+
+当前状态：部署链路已改用 `PKG_INDEX.json` 和 artifact manifest，输出文件名包含版本；但尚未用真实同名多版本包完成端到端验证。
 
 任务：
 
@@ -242,7 +248,7 @@ boost/
 验收：
 
 - `ohla xcompile --jobs N ...` 后可正常 `pkgs-deploy-all.sh`。
-- 多版本包不会互相覆盖部署文件。
+- [ ] 真实同名多版本包不会互相覆盖部署文件。
 
 ## 里程碑 9：清理旧模型
 
