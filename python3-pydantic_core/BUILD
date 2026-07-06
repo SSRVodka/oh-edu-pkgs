@@ -18,17 +18,17 @@ setup() {
 # custom_build/post_configure_hook instead.
 
 # [REQUIRED, NON-EMPTY, SEMVER]
-pkg_version=""
+pkg_version="2.46.4"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
-pkg_name=""
+pkg_name="python3-pydantic_core"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps=""
+pkg_deps="python3>=3.10"
 # [OPTIONAL, seperated by commas, NO-SPACE]
 # NOTE: you need to add build deps "python3,python3-build,python3-setuptools" if you use setup_pycrossenv in hooks
-pkg_build_deps=""
+pkg_build_deps="python3>=3.10,python3-build,python3-setuptools"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
-pkg_source_url=""
+pkg_source_url="https://files.pythonhosted.org/packages/9d/56/921726b776ace8d8f5db44c4ef961006580d91dc52b803c489fafd1aa249/pydantic_core-2.46.4.tar.gz"
 # [OPTIONAL, VALID-URL]
 pkg_release_url=""
 ###################################################
@@ -46,11 +46,7 @@ pkg_support_archs="x86_64,aarch64,arm"
 #  - add "python3" to pkg_build_deps if you use "meson"
 #  - you are responsible to set setup_pycrossenv if you set pkg_build_type == "meson", ensure meson, and use destroy_pycrossenv before finishing building this package.
 #  - do not run "rustup target add" or "pip install maturin" in BUILD hooks; maturin is managed by .ohloha/host-venv.
-#  - for PEP 517 Python packages, prefer build isolation and use --no-deps if
-#    you only need to avoid runtime dependencies. --no-build-isolation means
-#    build backends like hatchling must be installed in the crossenv build side
-#    via ${PYCROSS_BUILD_PIP}; installing them in ${HOST_TOOLS_PYTHON} is not enough.
-pkg_build_type=""
+pkg_build_type="pyo3-rust"
 # [OPTIONAL]
 pkg_build_parallism=""
 # [OPTIONAL: empty or Y]
@@ -169,7 +165,7 @@ post_configure_hook() {
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	:
+	install_current_python_wheelhouse_to_target_site_packages
 }
 
 ################ self-defined functions (local) goes below ################

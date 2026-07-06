@@ -4,6 +4,8 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 
 本仓库提供了从源码级别的成体系的迁移方案，您可以在此基础上很轻松的迁移其他需要的库。
 
+通过 [`ohloha`](https://gitcode.com/openharmony-robot/tools_ohloha) 支持并发编译、缓存等能力。
+
 ### 进度
 
 
@@ -103,5 +105,7 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 编写 `BUILD` 时，`setup()` 应只填写静态元数据和不依赖构建现场的默认值。不要在 `setup()` 中调用 `get_pkg_dst_dir`，也不要读取 `HOST_PYTHON_DIST`、`NUMPY*_LIBROOT`、`target_root_*`、`CFLAGS/LDFLAGS` 等运行态变量来拼动态 flags。依赖路径、Python/numpy include/lib 路径、根据当前 arch/workdir 计算出的 CMake/autotools/meson flags，应放在 `custom_build`、`post_configure_hook` 等 build 阶段 hook 中设置。
 
 Python crossenv 运行目录由 `setup2.sh` 管理在 `.ohloha/crossenv/<sdk-api>/<cpu>/`。BUILD 中如需引用交叉 Python 环境，应使用 `PY_CROSS_ROOT`、`HOST_SITE_PKGS`、`PYCROSS_CROSS_PYTHON`、`PYCROSS_CROSS_PIP`、`PYCROSS_BUILD_PIP`、`PYPKG_OUTPUT_WHEEL_DIR` 等变量，不要硬编码旧的 `crossenv_<cpu>` 路径。通用 Python helper 会先构建 wheel，归档到 `dist.wheels/`，再从本地 wheel 安装到 crossenv。CPython 交叉编译所需的 build-python 位于 `.ohloha/native/build-python`，根目录旧 `build-python.dist` 仅视为 legacy 生成物。
+
+Python 包构建时不要轻易给 `build_python_cross_package` 加 `--no-build-isolation`。`HOST_TOOLS_PYTHON` 是仓库私有 host tools venv，`build_python_cross_package` 实际进入的是 Python crossenv；PEP 517 build backend 会在 crossenv 的构建环境中导入。因此只把 `hatchling`、`flit_core`、`setuptools_scm` 等 backend 装进 `HOST_TOOLS_PYTHON`，不能满足 `--no-build-isolation` 构建。通常应保留 build isolation，让 `pip wheel` 按 `pyproject.toml` 自动安装 `[build-system].requires`；需要避免拉运行时依赖时使用 `--no-deps`，不要用 `--no-build-isolation`。只有确实需要复用已准备的 build-side Python 包时，才在 `setup_pycrossenv` 之后显式安装到 `${PYCROSS_BUILD_PIP}`，再使用 `build_python_cross_package_active ... --no-build-isolation`。
 
 PyO3/Rust 包不要在 `BUILD` 中修改 `PATH`、执行 `rustup target add` 或 `pip install maturin`。Rust 工具链和 target 是宿主环境前置；`maturin` 由 `.ohloha/host-venv/` 管理，通用 `pyo3-rust` 构建类型会使用明确的 `${HOST_MATURIN}`、`${HOST_TOOLS_PYTHON}` 和 Python crossenv 路径。

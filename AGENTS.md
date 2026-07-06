@@ -186,6 +186,8 @@
 - `pure-python`：只适合无 native 包依赖的 Python 包；通常需要 `pkg_build_deps` 包含 `python3,python3-build,python3-wheel,python3-setuptools`。
 - `custom`：仅在内置流程不适合时使用。自定义流程必须安装到 `${target_root_with_pkgname}`，并设置 `_custom_build_continue=false`。
 
+Python PEP 517 包构建时区分 `--no-deps` 和 `--no-build-isolation`：前者只禁止安装运行时依赖，后者会禁止 pip 按 `pyproject.toml` 创建隔离 build env 并安装 build backend。`HOST_TOOLS_PYTHON` 中安装的 `hatchling`、`flit_core`、`setuptools_scm` 等 host tool 不等于 crossenv 的 build-side Python 包；`build_python_cross_package` 进入 crossenv 后，backend 导入发生在 crossenv 构建环境中。默认优先保留 build isolation，并用 `--no-deps` 避免拉运行时依赖。只有确实需要 `--no-build-isolation` 时，先 `setup_pycrossenv`，把 backend 依赖安装到 `${PYCROSS_BUILD_PIP}`，再调用 `build_python_cross_package_active ... --no-build-isolation`，最后 `destroy_pycrossenv`。
+
 不要重复实现根脚本已处理的通用逻辑：依赖 include/lib/pkg-config 路径、CMake prefix/find-root、安装前缀、`.pc`/`.la` 修正和共享库 rpath 修正优先交给 `setup2.sh` 中的 helper。
 
 ## POSTINST 规约

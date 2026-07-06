@@ -61,16 +61,7 @@ custom_build() {
 }
 
 postbuilt_hook() {
-	local wheel_dir="${current_python_wheelhouse:-}"
-	local out="${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages"
-	local wheel
-
-	[ -d "$wheel_dir" ] || { echo "ERROR: missing wheelhouse: ${wheel_dir}"; return 1; }
-	mkdir -p "$out" || return 1
-	for wheel in "$wheel_dir"/*.whl; do
-		[ -f "$wheel" ] || { echo "ERROR: no wheel in ${wheel_dir}"; return 1; }
-		"${HOST_TOOLS_PYTHON}" -m zipfile -e "$wheel" "$out" || return 1
-	done
+	install_current_python_wheelhouse_to_target_site_packages
 }
 
 ################ self-defined functions (local) goes below ################

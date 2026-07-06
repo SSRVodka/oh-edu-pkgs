@@ -1808,6 +1808,29 @@ install_python_wheelhouse() {
     "${PYCROSS_CROSS_PIP}" install --force-reinstall --no-deps --no-index --find-links "$wheel_dir" "${wheels[@]}"
 }
 
+install_python_wheelhouse_to_target_site_packages() {
+    local wheel_dir="${1:-}"
+    local out="${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages"
+    local -a wheels=()
+    local wheel
+
+    [ -n "$wheel_dir" ] || { error "install_python_wheelhouse_to_target_site_packages: empty wheel dir"; return 1; }
+    [ -d "$wheel_dir" ] || { error "missing wheelhouse: ${wheel_dir}"; return 1; }
+    mapfile -t wheels < <(find "$wheel_dir" -maxdepth 1 -type f -name "*.whl" | sort)
+    if [ "${#wheels[@]}" -eq 0 ]; then
+        error "no wheels in ${wheel_dir}"
+        return 1
+    fi
+    mkdir -p "$out" || return 1
+    for wheel in "${wheels[@]}"; do
+        "${HOST_TOOLS_PYTHON}" -m zipfile -e "$wheel" "$out" || return 1
+    done
+}
+
+install_current_python_wheelhouse_to_target_site_packages() {
+    install_python_wheelhouse_to_target_site_packages "${current_python_wheelhouse:-}"
+}
+
 build_python_cross_package_active() {
     local build_rc=0
     local wheel_dir

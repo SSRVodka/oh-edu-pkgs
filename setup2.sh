@@ -22,6 +22,8 @@ HOST_TOOLS_BIN=${HOST_TOOLS_VENV}/bin
 HOST_TOOLS_PYTHON=${HOST_TOOLS_BIN}/python3
 HOST_TOOLS_PIP=${HOST_TOOLS_BIN}/pip
 HOST_MATURIN=${HOST_TOOLS_BIN}/maturin
+HOST_HATCHLING=${HOST_TOOLS_BIN}/hatchling
+HOST_FLIT=${HOST_TOOLS_BIN}/flit
 HOST_TOOLS_SITE_PKGS=""
 PIP_CACHE_DIR=${OHLOHA_ROOT}/pip-cache
 export PIP_CACHE_DIR
@@ -118,6 +120,14 @@ ensure_host_tools_unlocked() {
 	fi
 	if [ ! -x "${HOST_MATURIN}" ]; then
 		missing_tools+=(maturin)
+	fi
+	# needed by python3-pydantic, python3-annotated-types
+	if [ ! -x "${HOST_HATCHLING}" ]; then
+		missing_tools+=(hatchling)
+	fi
+	# needed by python3-typing-extensions
+	if [ ! -x "${HOST_FLIT}" ]; then
+		missing_tools+=(flit)
 	fi
 
 	if [ "${#missing_tools[@]}" -gt 0 ]; then
