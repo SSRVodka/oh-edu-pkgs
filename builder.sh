@@ -1740,17 +1740,9 @@ setup_pycrossenv() {
     if [[ ":${LD_LIBRARY_PATH:-}:" != *":${buildpy_libdir}:"* ]]; then
         export LD_LIBRARY_PATH=${buildpy_libdir}:$LD_LIBRARY_PATH
     fi
-    # override the flags (python deps) in setup.sh
-    local _pypkg_deps="$PY_DEPS python3"
-    local dep
-    for dep in $_pypkg_deps; do
-        CFLAGS="-I$(get_pkg_dst_dir $dep)/include $CFLAGS"
-        LDFLAGS="-L$(get_pkg_dst_dir $dep)/${OHOS_LIBDIR} $LDFLAGS"
-        PKG_CONFIG_LIBDIR="$(get_pkg_dst_dir $dep)/${OHOS_LIBDIR}/pkgconfig:${PKG_CONFIG_LIBDIR}"
-    done
-
-    # add header path for special libraries (python deps & numpy-dev)
-    CFLAGS="-I$(get_pkg_dst_dir xz)/include/lzma -I$(get_pkg_dst_dir libncursesw)/include/ncursesw -I$(get_pkg_dst_dir libreadline)/include/readline -I$(get_pkg_dst_dir util-linux)/include/uuid -I${NUMPY_LIBROOT}/include -I${NUMPY2_LIBROOT}/include $CFLAGS"
+    # Python package builds need the target Python prefix. Native libraries used
+    # by a package itself must be declared in that package and added by its hook.
+    CFLAGS="-I${HOST_PYTHON_DIST}/include -I${NUMPY_LIBROOT}/include -I${NUMPY2_LIBROOT}/include $CFLAGS"
     CXXFLAGS="$CFLAGS"
     LDFLAGS="-lpython${PY_VERSION} -L${NUMPY_LIBROOT}/lib -L${NUMPY2_LIBROOT}/lib $LDFLAGS"
     PKG_CONFIG_LIBDIR="${HOST_PYTHON_DIST}/${OHOS_LIBDIR}/pkgconfig:${NUMPY_LIBROOT}/lib/pkgconfig:${NUMPY2_LIBROOT}/lib/pkgconfig"

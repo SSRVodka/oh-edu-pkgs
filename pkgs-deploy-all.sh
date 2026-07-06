@@ -32,7 +32,7 @@ get_pkg_dst_dir() {
     return 1
 }
 
-python3 - "$PKG_INDEX_FILE" "${CUR_DIR}/.ohloha/artifacts" "${OHOS_CPU}" "${OHOS_SDK_API_VERSION}" <<'PY' | while IFS=$'\t' read -r name version deps build_file; do
+python3 - "$PKG_INDEX_FILE" "${CUR_DIR}/.ohloha/artifacts" "${OHOS_CPU}" "${OHOS_SDK_API_VERSION}" <<'PY' | while IFS=$'\037' read -r name version deps build_file; do
 import json
 import os
 import sys
@@ -44,6 +44,7 @@ artifact_root = sys.argv[2]
 arch = sys.argv[3]
 ohos_api = sys.argv[4]
 resolved_deps = {}
+sep = "\x1f"
 
 if os.path.isdir(artifact_root):
     for root, dirs, files in os.walk(artifact_root):
@@ -72,7 +73,7 @@ for pkg in packages:
         version,
         deps,
         pkg["build_file"],
-        sep="\t",
+        sep=sep,
     )
 PY
     echo "---- PKG ----"
@@ -82,7 +83,10 @@ PY
     echo "build_file=$build_file"
     echo "-------------"
 
-    resd=$(get_pkg_dst_dir "$name" "$version")
+    if ! resd=$(get_pkg_dst_dir "$name" "$version"); then
+        warn "cannot find package input for '$name' version '$version'"
+        continue
+    fi
     if [ ! -d "${resd}" ]; then
         warn "cannot find package input for '$name': '$resd'"
         continue
