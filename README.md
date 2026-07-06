@@ -4,7 +4,7 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 
 本仓库提供了从源码级别的成体系的迁移方案，您可以在此基础上很轻松的迁移其他需要的库。
 
-通过 [`ohloha`](https://gitcode.com/openharmony-robot/tools_ohloha) 支持并发编译、缓存等能力。
+通过 [`ohloha`](https://gitcode.com/openharmony-robot/tools_ohloha) ([gh mirror](https://github.com/SSRVodka/oh-packager)) 支持并发编译、缓存等能力。
 
 AI 友好：提供了 `AGENTS.md`, `DESIGN.md` 文档，以及一个迁移 pure-python 类型包的 skill（位于 `.skills` 下）。
 
