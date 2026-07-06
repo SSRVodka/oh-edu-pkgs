@@ -16,3 +16,6 @@ apt install -y glslang-tools
 apt install -y gperf
 # openjdk deps: use same jdk version as bootstrap JDK; no libstdc++-12-dev to avoid using default glibc
 apt install -y openjdk-21-jdk libc6-dev libc++-12-dev libc++abi-12-dev clang llvm lldb lld
+# PyO3/rust packages deps
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+. "$HOME/.cargo/env"
