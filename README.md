@@ -6,6 +6,8 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 
 通过 [`ohloha`](https://gitcode.com/openharmony-robot/tools_ohloha) 支持并发编译、缓存等能力。
 
+AI 友好：提供了 `AGENTS.md`, `DESIGN.md` 文档，以及一个迁移 pure-python 类型包的 skill（位于 `.skills` 下）。
+
 ### 进度
 
 

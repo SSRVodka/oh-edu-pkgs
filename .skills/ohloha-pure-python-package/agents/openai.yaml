@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ohloha Pure Python"
+  short_description: "Migrate pure Python packages for ohloha"
+  default_prompt: "Use $ohloha-pure-python-package to migrate a pure Python PyPI package into ohloha_pkgs."

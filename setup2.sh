@@ -102,6 +102,21 @@ with_ohloha_lock() {
 	return "$rc"
 }
 
+ensure_symlink() {
+	local target="${1:?symlink target is required}"
+	local link_path="${2:?symlink path is required}"
+	local tmp_link
+
+	if [ "$(readlink "${link_path}" 2>/dev/null || true)" = "${target}" ]; then
+		return 0
+	fi
+
+	tmp_link="${link_path}.tmp.$$"
+	rm -f "${tmp_link}"
+	ln -s "${target}" "${tmp_link}"
+	mv -Tf "${tmp_link}" "${link_path}"
+}
+
 ensure_host_tools_unlocked() {
 	if [ ! -x "${HOST_TOOLS_PYTHON}" ]; then
 		info "creating host tools venv: ${HOST_TOOLS_VENV}"
@@ -140,6 +155,15 @@ ensure_host_tools() {
 	with_ohloha_lock host-tools ensure_host_tools_unlocked
 	HOST_TOOLS_SITE_PKGS=$("${HOST_TOOLS_PYTHON}" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')
 	export PATH="${HOST_TOOLS_BIN}:$PATH"
+}
+
+ensure_tool_wrappers_unlocked() {
+	ensure_symlink "${OHOS_SDK}/native/llvm/bin/llvm-strip" "${TOOL_WRAPPER_BIN}/strip"
+	ensure_symlink "${OHOS_SDK}/native/llvm/bin/llvm-profdata" "${TOOL_WRAPPER_BIN}/profdata"
+}
+
+ensure_tool_wrappers() {
+	with_ohloha_lock "tool-wrappers-${OHOS_SDK_API_VERSION}-${OHOS_CPU}" ensure_tool_wrappers_unlocked
 }
 
 if [ -z "${OHOS_SDK:-}" ]; then
@@ -212,8 +236,7 @@ export AR=${OHOS_SDK}/native/llvm/bin/llvm-ar
 export PROFDATA=${OHOS_SDK}/native/llvm/bin/llvm-profdata
 TOOL_WRAPPER_BIN=${OHLOHA_TOOL_WRAPPER_ROOT}/${OHOS_SDK_API_VERSION}/${OHOS_CPU}/bin
 mkdir -p "${TOOL_WRAPPER_BIN}"
-ln -sfn "${OHOS_SDK}/native/llvm/bin/llvm-strip" "${TOOL_WRAPPER_BIN}/strip"
-ln -sfn "${OHOS_SDK}/native/llvm/bin/llvm-profdata" "${TOOL_WRAPPER_BIN}/profdata"
+ensure_tool_wrappers
 #export CFLAGS="-fPIC -D__MUSL__=1 -D__OPENHARMONY__=1 -I${HOST_SYSROOT}/usr/include -I${HOST_SYSROOT}/usr/include/${OHOS_CPU}-linux-ohos"
 # keep track with ohos.toolchain.cmake + CMAKE_C_FLAGS_INIT
 # including arch-dependent headers
