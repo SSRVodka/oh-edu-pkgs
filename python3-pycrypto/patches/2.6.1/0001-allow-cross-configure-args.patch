@@ -1,0 +1,12 @@
+--- a/setup.py
++++ b/setup.py
+@@ -272,6 +272,9 @@ class PCTBuildConfigure(Command):
+             if os.system("chmod 0755 configure") != 0:
+                 raise RuntimeError("chmod error")
+             cmd = "sh configure"    # we use "sh" here so that it'll work on mingw32 with standard python.org binaries
++            extra_configure_args = os.environ.get("PYCRYPTO_CONFIGURE_ARGS")
++            if extra_configure_args:
++                cmd += " " + extra_configure_args
+             if self.verbose < 1:
+                 cmd += " -q"
+             if os.system(cmd) != 0:

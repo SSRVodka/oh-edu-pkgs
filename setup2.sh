@@ -24,6 +24,7 @@ HOST_TOOLS_PIP=${HOST_TOOLS_BIN}/pip
 HOST_MATURIN=${HOST_TOOLS_BIN}/maturin
 HOST_HATCHLING=${HOST_TOOLS_BIN}/hatchling
 HOST_FLIT=${HOST_TOOLS_BIN}/flit
+HOST_SWIG=${HOST_TOOLS_BIN}/swig
 HOST_TOOLS_SITE_PKGS=""
 PIP_CACHE_DIR=${OHLOHA_ROOT}/pip-cache
 export PIP_CACHE_DIR
@@ -144,6 +145,34 @@ ensure_host_tools_unlocked() {
 	if [ ! -x "${HOST_FLIT}" ]; then
 		missing_tools+=(flit)
 	fi
+	if [ ! -x "${HOST_SWIG}" ]; then
+		missing_tools+=(swig)
+	fi
+	# needed by native Python packages using modern PEP 517 backends.
+	if ! "${HOST_TOOLS_PYTHON}" -c 'import setuptools_scm' >/dev/null 2>&1; then
+		missing_tools+=(setuptools-scm)
+	fi
+	if ! "${HOST_TOOLS_PYTHON}" -c 'import cppy' >/dev/null 2>&1; then
+		missing_tools+=(cppy)
+	fi
+	if ! "${HOST_TOOLS_PYTHON}" -c 'import scikit_build_core' >/dev/null 2>&1; then
+		missing_tools+=(scikit-build-core)
+	fi
+	if ! "${HOST_TOOLS_PYTHON}" -c 'import mesonpy' >/dev/null 2>&1; then
+		missing_tools+=(meson-python)
+	fi
+	if ! "${HOST_TOOLS_PYTHON}" -c 'import pybind11' >/dev/null 2>&1; then
+		missing_tools+=(pybind11)
+	fi
+	if ! "${HOST_TOOLS_PYTHON}" -c 'import pythran' >/dev/null 2>&1; then
+		missing_tools+=(pythran)
+	fi
+	if ! "${HOST_TOOLS_PYTHON}" -c 'import setuptools_rust' >/dev/null 2>&1; then
+		missing_tools+=(setuptools-rust)
+	fi
+	if ! "${HOST_TOOLS_PYTHON}" -c 'import pipcl' >/dev/null 2>&1; then
+		missing_tools+=(pipcl)
+	fi
 
 	if [ "${#missing_tools[@]}" -gt 0 ]; then
 		info "installing missing host build tools into private venv: ${missing_tools[*]}"
@@ -157,9 +186,291 @@ ensure_host_tools() {
 	export PATH="${HOST_TOOLS_BIN}:$PATH"
 }
 
+find_host_libclang() {
+	if [ -n "${HOST_LIBCLANG:-}" ]; then
+		if [ ! -f "${HOST_LIBCLANG}" ]; then
+			error "HOST_LIBCLANG does not exist: ${HOST_LIBCLANG}"
+			return 1
+		fi
+		readlink -f "${HOST_LIBCLANG}"
+		return 0
+	fi
+
+	local candidate=""
+	for candidate in \
+		/usr/lib/llvm-*/lib/libclang.so \
+		/usr/lib/llvm-*/lib/libclang-*.so* \
+		/usr/lib/*/libclang.so \
+		/usr/lib/*/libclang-*.so*
+	do
+		[ -f "${candidate}" ] || continue
+		case "$(basename "${candidate}")" in
+			libclang-cpp*)
+				continue
+				;;
+		esac
+		readlink -f "${candidate}"
+		return 0
+	done
+
+	return 1
+}
+
 ensure_tool_wrappers_unlocked() {
 	ensure_symlink "${OHOS_SDK}/native/llvm/bin/llvm-strip" "${TOOL_WRAPPER_BIN}/strip"
 	ensure_symlink "${OHOS_SDK}/native/llvm/bin/llvm-profdata" "${TOOL_WRAPPER_BIN}/profdata"
+	rm -f "${TOOL_WRAPPER_BIN}/ld.lld"
+
+	local host_libclang=""
+	if host_libclang=$(find_host_libclang); then
+		mkdir -p "${TOOL_WRAPPER_LIBCLANG_DIR}"
+		ensure_symlink "${host_libclang}" "${TOOL_WRAPPER_LIBCLANG_DIR}/libclang.so"
+	else
+		rm -f "${TOOL_WRAPPER_LIBCLANG_DIR}/libclang.so"
+	fi
+
+	local ld_emulation=""
+	case "${OHOS_CPU}" in
+		aarch64)
+			ld_emulation="aarch64linux"
+			;;
+		arm)
+			ld_emulation="armelf_linux_eabi"
+			;;
+		x86_64)
+			ld_emulation="elf_x86_64"
+			;;
+		*)
+			error "unsupported OHOS_CPU for ld.lld wrapper: ${OHOS_CPU}"
+			return 1
+			;;
+	esac
+
+	local binary_or_cxx_wrapper="${TOOL_WRAPPER_BIN}/ld.binary-input-or-cxx"
+	rm -f "${TOOL_WRAPPER_BIN}/ld.lld-binary-input"
+	cat > "${binary_or_cxx_wrapper}" <<EOF
+#!/bin/bash
+set -Eeuo pipefail
+
+real_ld="${OHOS_SDK}/native/llvm/bin/ld.lld"
+real_cxx="${OHOS_SDK}/native/llvm/bin/clang++"
+ld_emulation="${ld_emulation}"
+ohos_target="${OHOS_CPU}-linux-ohos"
+ohos_sysroot="${OHOS_SDK}/native/sysroot"
+ohos_sysroot_lib="${OHOS_SDK}/native/sysroot/usr/lib/${OHOS_CPU}-linux-ohos"
+uses_binary_input=false
+has_emulation=false
+previous_arg=""
+
+for arg in "\$@"; do
+	case "\$arg" in
+		-m|-m*)
+			has_emulation=true
+			;;
+		-b=binary|--format=binary)
+			uses_binary_input=true
+			;;
+		binary)
+			if [ "\$previous_arg" = "-b" ]; then
+				uses_binary_input=true
+			fi
+			;;
+	esac
+	previous_arg="\$arg"
+done
+
+# MuPDF embeds resource files with \`ld -r -b binary\`. The OHOS SDK ld.lld
+# cannot infer an output architecture from raw binary input, so pass an
+# emulation explicitly for that one mode.
+if [ "\$uses_binary_input" = true ]; then
+	if [ "\$has_emulation" = false ]; then
+		exec "\$real_ld" -m "\$ld_emulation" "\$@"
+	fi
+	exec "\$real_ld" "\$@"
+fi
+
+# PyMuPDF later reuses \$LD for normal Python extension links, but passes
+# compiler-driver flags such as -DNDEBUG, -MD/-MF and -Wl,*. Route non-binary
+# links through clang++ while keeping the raw ld.lld path above for resources.
+exec "\$real_cxx" --target="\$ohos_target" --sysroot="\$ohos_sysroot" -fuse-ld=lld -L"\$ohos_sysroot_lib" "\$@"
+EOF
+	chmod +x "${binary_or_cxx_wrapper}"
+
+	cat > "${TOOL_WRAPPER_BIN}/gfortran" <<EOF
+#!/bin/bash
+set -Eeuo pipefail
+
+real_fc="${OHOS_CPU}-linux-gnu-gfortran"
+ohos_clang="${OHOS_SDK}/native/llvm/bin/clang"
+ohos_target="${OHOS_CPU}-linux-ohos"
+ohos_sysroot="${OHOS_SDK}/native/sysroot"
+rt_dir="${PATCH_FILE_ROOT}/libgfortran_rt/${OHOS_CPU}"
+
+compile_only=false
+inputs=()
+link_inputs=()
+linker_probe=false
+
+for arg in "\$@"; do
+	case "\$arg" in
+		--print-search-dirs|-print-search-dirs)
+			printf 'install: =\\n'
+			printf 'programs: =\\n'
+			printf 'libraries: =%s\\n' "\$rt_dir"
+			exit 0
+			;;
+		-print-file-name=libgfortran.so|-print-file-name=libgfortran.so.5)
+			printf '%s/libgfortran.so.5\\n' "\$rt_dir"
+			exit 0
+			;;
+		-print-file-name=libgcc_s.so|-print-file-name=libgcc_s.so.1)
+			printf '%s/libgcc_s.so.1\\n' "\$rt_dir"
+			exit 0
+			;;
+		-print-file-name=libquadmath.so|-print-file-name=libquadmath.so.0)
+			printf '%s/libquadmath.so.0\\n' "\$rt_dir"
+			exit 0
+			;;
+		-v|--version|-dumpversion|-dumpfullversion|-print-*|--print-*)
+			exec "\$real_fc" "\$@"
+			;;
+		-c|-S|-E)
+			compile_only=true
+			;;
+		-Wl,--version|-Wl,-v)
+			linker_probe=true
+			;;
+		*.f|*.F|*.for|*.FOR|*.f90|*.F90|*.f95|*.F95|*.f03|*.F03|*.f08|*.F08)
+			inputs+=("\$arg")
+			;;
+		*.o|*.a|*.so|*.so.*)
+			link_inputs+=("\$arg")
+			;;
+	esac
+done
+
+if [ ! -d "\$rt_dir" ]; then
+	echo "ERROR: missing libgfortran runtime: \$rt_dir" >&2
+	exit 1
+fi
+
+filter_clang_driver_args() {
+	local filtered=()
+	local skip_next=false
+	local arg
+	for arg in "\$@"; do
+		if [ "\$skip_next" = true ]; then
+			skip_next=false
+			continue
+		fi
+		case "\$arg" in
+			--target=*|--sysroot=*|-fuse-ld=*)
+				;;
+			--target|--sysroot)
+				skip_next=true
+				;;
+			*)
+				filtered+=("\$arg")
+				;;
+		esac
+	done
+	printf '%s\\0' "\${filtered[@]}"
+}
+
+is_fortran_source() {
+	case "\${1:-}" in
+		*.f|*.F|*.for|*.FOR|*.f90|*.F90|*.f95|*.F95|*.f03|*.F03|*.f08|*.F08)
+			return 0
+			;;
+	esac
+	return 1
+}
+
+build_fortran_source_compile_args() {
+	compile_args=()
+	local skip_next=false
+	local arg
+	for arg in "\$@"; do
+		if [ "\$skip_next" = true ]; then
+			skip_next=false
+			continue
+		fi
+		case "\$arg" in
+			-o|--target|--sysroot)
+				skip_next=true
+				;;
+			--target=*|--sysroot=*|-fuse-ld=*|-shared|-Wl,*|-L*|-l*|*.o|*.a|*.so|*.so.*)
+				;;
+			*)
+				if ! is_fortran_source "\$arg"; then
+					compile_args+=("\$arg")
+				fi
+				;;
+		esac
+	done
+}
+
+build_clang_link_args() {
+	link_args=()
+	compile_args=()
+	build_fortran_source_compile_args "\$@"
+
+	local skip_next=false
+	local keep_next=false
+	local arg obj
+	local src_index=0
+	for arg in "\$@"; do
+		if [ "\$skip_next" = true ]; then
+			skip_next=false
+			continue
+		fi
+		if [ "\$keep_next" = true ]; then
+			link_args+=("\$arg")
+			keep_next=false
+			continue
+		fi
+		case "\$arg" in
+			--target=*|--sysroot=*|-fuse-ld=*)
+				;;
+			--target|--sysroot)
+				skip_next=true
+				;;
+			-o)
+				link_args+=("\$arg")
+				keep_next=true
+				;;
+			*)
+				if is_fortran_source "\$arg"; then
+					obj="\$tmpdir/fortran-\${src_index}.o"
+					src_index=\$((src_index + 1))
+					"\$real_fc" "\${compile_args[@]}" -c "\$arg" -o "\$obj"
+					link_args+=("\$obj")
+				else
+					link_args+=("\$arg")
+				fi
+				;;
+		esac
+	done
+}
+
+if [ "\$compile_only" = true ] || { [ "\$linker_probe" = false ] && [ "\${#inputs[@]}" -eq 0 ] && [ "\${#link_inputs[@]}" -eq 0 ]; }; then
+	mapfile -d '' fc_args < <(filter_clang_driver_args "\$@")
+	exec "\$real_fc" "\${fc_args[@]}"
+fi
+
+tmpdir=\$(mktemp -d)
+trap 'rm -rf "\$tmpdir"' EXIT
+link_args=()
+compile_args=()
+build_clang_link_args "\$@"
+
+exec "\$ohos_clang" --target="\$ohos_target" --sysroot="\$ohos_sysroot" -fuse-ld=lld \\
+	-L"\$rt_dir" "\${link_args[@]}" -l:libgfortran.so.5 -l:libgcc_s.so.1 \\
+	-Wl,-rpath,\\\$ORIGIN -Wl,-rpath,\\\$ORIGIN/.. \\
+	-Wl,-rpath,\\\$ORIGIN/../.. -Wl,-rpath,\\\$ORIGIN/../../.. \\
+	-lm -lc
+EOF
+	chmod +x "${TOOL_WRAPPER_BIN}/gfortran"
 }
 
 ensure_tool_wrappers() {
@@ -235,8 +546,11 @@ export NM=${OHOS_SDK}/native/llvm/bin/llvm-nm
 export AR=${OHOS_SDK}/native/llvm/bin/llvm-ar
 export PROFDATA=${OHOS_SDK}/native/llvm/bin/llvm-profdata
 TOOL_WRAPPER_BIN=${OHLOHA_TOOL_WRAPPER_ROOT}/${OHOS_SDK_API_VERSION}/${OHOS_CPU}/bin
+TOOL_WRAPPER_LIBCLANG_DIR=${OHLOHA_TOOL_WRAPPER_ROOT}/${OHOS_SDK_API_VERSION}/${OHOS_CPU}/libclang
 mkdir -p "${TOOL_WRAPPER_BIN}"
 ensure_tool_wrappers
+export OHOS_LD_BINARY_INPUT_OR_CXX=${TOOL_WRAPPER_BIN}/ld.binary-input-or-cxx
+export HOST_LIBCLANG_LIBRARY_PATH=${TOOL_WRAPPER_LIBCLANG_DIR}
 #export CFLAGS="-fPIC -D__MUSL__=1 -D__OPENHARMONY__=1 -I${HOST_SYSROOT}/usr/include -I${HOST_SYSROOT}/usr/include/${OHOS_CPU}-linux-ohos"
 # keep track with ohos.toolchain.cmake + CMAKE_C_FLAGS_INIT
 # including arch-dependent headers
@@ -336,11 +650,11 @@ build_makeproj_with_deps() {
 	local configure_dir="${7:-${target_dir}}"
 	local make_install_target="${8:-install}"
 
-	local OLD_CFLAGS="$CFLAGS"
-	local OLD_CXXFLAGS="$CXXFLAGS"
-	local OLD_CPPFLAGS="$CPPFLAGS"
-	local OLD_LDFLAGS="$LDFLAGS"
-	local OLD_PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR"
+	local OLD_CFLAGS="${CFLAGS:-}"
+	local OLD_CXXFLAGS="${CXXFLAGS:-}"
+	local OLD_CPPFLAGS="${CPPFLAGS:-}"
+	local OLD_LDFLAGS="${LDFLAGS:-}"
+	local OLD_PKG_CONFIG_LIBDIR="${PKG_CONFIG_LIBDIR:-}"
 	local install_prefix="${target_root_prefix_without_pkgname:-${TARGET_ROOT}}"
 	local install_dir
 	install_dir=$(get_pkg_install_dir "$target_dir")
@@ -350,14 +664,14 @@ build_makeproj_with_deps() {
 	local dep
 	for dep in $deps; do
 		local dep_prefix
-		dep_prefix=$(get_pkg_dst_dir "$dep")
-		CFLAGS="-I${dep_prefix}/include ${CFLAGS}"
-		LDFLAGS="-L${dep_prefix}/${OHOS_LIBDIR} ${LDFLAGS}"
-		PKG_CONFIG_LIBDIR="${dep_prefix}/${OHOS_LIBDIR}/pkgconfig:$PKG_CONFIG_LIBDIR"
+		dep_prefix=$(get_pkg_dst_dir "$dep") || return 1
+		CFLAGS="-I${dep_prefix}/include ${CFLAGS:-}"
+		LDFLAGS="-L${dep_prefix}/${OHOS_LIBDIR} ${LDFLAGS:-}"
+		PKG_CONFIG_LIBDIR="${dep_prefix}/${OHOS_LIBDIR}/pkgconfig:${PKG_CONFIG_LIBDIR:-}"
 	done
 
-	CXXFLAGS="$CFLAGS"
-	CPPFLAGS="$CFLAGS"
+	CXXFLAGS="${CFLAGS:-}"
+	CPPFLAGS="${CFLAGS:-}"
 
 	if [ -n "$bootstrap_script" ] && [ -f "$bootstrap_script" ]; then
 		bash "$bootstrap_script"
@@ -398,10 +712,10 @@ build_makeproj_with_deps() {
 	configure_flags="${configure_flags} ${suffix_configure_flags}"
 
 	info "configure flags: ${configure_flags}"
-	info "cflags: ${CFLAGS}"
-	info "ldflags: ${LDFLAGS}"
-	info "pkgconfig_libdir: ${PKG_CONFIG_LIBDIR}"
-	$configure_exe $configure_flags
+	info "cflags: ${CFLAGS:-}"
+	info "ldflags: ${LDFLAGS:-}"
+	info "pkgconfig_libdir: ${PKG_CONFIG_LIBDIR:-}"
+	$configure_exe $configure_flags || { return 1; }
 	current_build_root=$(readlink -f .)
 	if [ "x${pkg_build_type:-}" != "xcustom" ]; then
 		post_configure_hook || { error "post_configure_hook failed for ${target_dir}"; return 1; }
@@ -682,10 +996,29 @@ PY_DEPS="libz openssl libffi sqlite bzip2 xz libncursesw libreadline libgettext 
 
 BUILD_PYTHON_DIST=${OHLOHA_ROOT}/native/build-python
 BUILD_PYTHON_DIST_PYTHON=${BUILD_PYTHON_DIST}/bin/python3
+BUILD_PYTHON_DIST_PIP=${BUILD_PYTHON_DIST}/bin/pip3
 
 BUILD_PYTHON_BIN="${BUILD_PYTHON_DIST}/bin"
-BUILD_PYTHON=$BUILD_PYTHON_BIN/python3
-BUILD_PIP=$BUILD_PYTHON_BIN/pip3
+BUILD_PYTHON_WRAPPER_ROOT=${OHLOHA_TOOL_WRAPPER_ROOT}/build-python
+BUILD_PYTHON=${BUILD_PYTHON_WRAPPER_ROOT}/python3
+BUILD_PIP=${BUILD_PYTHON_WRAPPER_ROOT}/pip3
+
+ensure_build_python_wrappers() {
+	mkdir -p "${BUILD_PYTHON_WRAPPER_ROOT}"
+	cat > "${BUILD_PYTHON}" <<EOF
+#!/bin/sh
+export LD_LIBRARY_PATH="${BUILD_PYTHON_DIST}/lib:\${LD_LIBRARY_PATH:-}"
+exec "${BUILD_PYTHON_DIST_PYTHON}" "\$@"
+EOF
+	chmod +x "${BUILD_PYTHON}"
+	cat > "${BUILD_PIP}" <<EOF
+#!/bin/sh
+export LD_LIBRARY_PATH="${BUILD_PYTHON_DIST}/lib:\${LD_LIBRARY_PATH:-}"
+exec "${BUILD_PYTHON_DIST_PIP}" "\$@"
+EOF
+	chmod +x "${BUILD_PIP}"
+}
+ensure_build_python_wrappers
 
 HOST_PYTHON_DIST="${HOST_PYTHON_DIST:-}"
 if [ -n "$HOST_PYTHON_DIST" ]; then
@@ -903,7 +1236,7 @@ setup_pyo3_rust_cross_env() {
 		return 1
 	fi
 
-	local rust_target cargo_key ohos_target cc_bin cxx_bin cxx_inc python_prefix
+	local rust_target cargo_key cc_env_key ohos_target cc_bin cxx_bin cxx_inc python_prefix
 	rust_target=$(ohos_rust_target_for_cpu "${OHOS_CPU}") || rc=$?
 	if [ "$rc" -eq 0 ]; then
 		ensure_pyo3_rust_target "${rust_target}" || rc=$?
@@ -913,6 +1246,7 @@ setup_pyo3_rust_cross_env() {
 		return "$rc"
 	fi
 	cargo_key=$(cargo_env_key_for_target "${rust_target}")
+	cc_env_key="${rust_target//-/_}"
 	ohos_target="${OHOS_CPU}-linux-ohos"
 	cc_bin="${OHOS_SDK}/native/llvm/bin/clang"
 	cxx_bin="${OHOS_SDK}/native/llvm/bin/clang++"
@@ -933,6 +1267,11 @@ setup_pyo3_rust_cross_env() {
 	export "AR_${cargo_key}=${AR}"
 	export "CFLAGS_${cargo_key}=--target=${ohos_target} --sysroot=${HOST_SYSROOT} ${CFLAGS:-}"
 	export "CXXFLAGS_${cargo_key}=--target=${ohos_target} --sysroot=${HOST_SYSROOT} -I${cxx_inc} ${CXXFLAGS:-}"
+	export "CC_${cc_env_key}=${cc_bin}"
+	export "CXX_${cc_env_key}=${cxx_bin}"
+	export "AR_${cc_env_key}=${AR}"
+	export "CFLAGS_${cc_env_key}=--target=${ohos_target} --sysroot=${HOST_SYSROOT} -I${python_prefix}/include/python${PY_VERSION} ${CFLAGS:-}"
+	export "CXXFLAGS_${cc_env_key}=--target=${ohos_target} --sysroot=${HOST_SYSROOT} -I${python_prefix}/include/python${PY_VERSION} -I${cxx_inc} ${CXXFLAGS:-}"
 	export CRATE_CC_NO_DEFAULTS=1
 	export CXXSTDLIB="c++"
 	export MATURIN_NO_WHEEL_REPAIR=1

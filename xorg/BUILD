@@ -18,7 +18,7 @@ pkg_name="xorg"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
 pkg_deps="fontconfig>=2.0"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="fontconfig>=2.0,freetype>2.0,libncursesw>6.0,libreadline>8.0,icu>70.0,libexpat>2.0,libxml2>2.0,libiconv>1.0,python3,python3-build,python3-setuptools"
+pkg_build_deps="fontconfig>=2.0,freetype>2.0,libncursesw>6.0,libreadline>8.0,icu>70.0,libexpat>2.0,libxml2>2.0,libiconv>1.0,python3"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://www.x.org/pub/individual/lib/"
@@ -262,9 +262,6 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
-
-	setup_pycrossenv
-
 	# keep track with that in custom_download_source
 	LIBNAME_LIST=libnames.list
 	
@@ -278,26 +275,26 @@ custom_build() {
 
 	pushd ${current_source_root}
 
-	build_makeproj_with_deps "util-macros" "" "$XORG_CONFIG"
-	mv_xorg_comp_to_prefix "util-macros"
+	build_makeproj_with_deps "util-macros" "" "$XORG_CONFIG" || return 1
+	mv_xorg_comp_to_prefix "util-macros" || return 1
 
-	PYTHON=${BUILD_PYTHON} build_makeproj_with_deps "xcb-proto" "" "$XORG_CONFIG"
-	mv_xorg_comp_to_prefix "xcb-proto"
+	PYTHON=${BUILD_PYTHON} build_makeproj_with_deps "xcb-proto" "" "$XORG_CONFIG" || return 1
+	mv_xorg_comp_to_prefix "xcb-proto" || return 1
 
 	reset_meson $MESON_CROSS_FILE_BASE
 	# deps: util-macros
-	build_mesonproj_with_deps "xorgproto" "$pkg_name" "$MESON_CROSS_FILE_BASE"
-	mv_xorg_comp_to_prefix "xorgproto"
+	build_mesonproj_with_deps "xorgproto" "$pkg_name" "$MESON_CROSS_FILE_BASE" || return 1
+	mv_xorg_comp_to_prefix "xorgproto" || return 1
 	# rename doc
 	mv -v $XORG_PREFIX/share/doc/xorgproto{,-2025.1}
 
 	# deps: xorgproto
-	build_makeproj_with_deps "libXau" "$pkg_name" "$XORG_CONFIG"
-	mv_xorg_comp_to_prefix "libXau"
+	build_makeproj_with_deps "libXau" "$pkg_name" "$XORG_CONFIG" || return 1
+	mv_xorg_comp_to_prefix "libXau" || return 1
 
 	# deps: libXau, xcp-proto (fake deps xorg)
-	build_makeproj_with_deps "libxcb" "$pkg_name" "$XORG_CONFIG --without-doxygen --docdir=\${datadir}/doc/libxcb-1.17.0"
-	mv_xorg_comp_to_prefix "libxcb"
+	build_makeproj_with_deps "libxcb" "$pkg_name" "$XORG_CONFIG --without-doxygen --docdir=\${datadir}/doc/libxcb-1.17.0" || return 1
+	mv_xorg_comp_to_prefix "libxcb" || return 1
 #
 #	local pkg
 #
@@ -340,7 +337,13 @@ custom_build() {
 	pushd xlibs
 	# deps: libxcb (fake deps), fontconfig
 	# note: freetype, readline, ncurses use special header dir
-	CFLAGS="-I$(get_pkg_dst_dir freetype)/include/freetype2 -I$(get_pkg_dst_dir libncursesw)/include/ncursesw -I$(get_pkg_dst_dir libreadline)/include/readline $CFLAGS"
+	local freetype_prefix
+	local ncursesw_prefix
+	local readline_prefix
+	freetype_prefix=$(get_pkg_dst_dir freetype) || return 1
+	ncursesw_prefix=$(get_pkg_dst_dir libncursesw) || return 1
+	readline_prefix=$(get_pkg_dst_dir libreadline) || return 1
+	CFLAGS="-I${freetype_prefix}/include/freetype2 -I${ncursesw_prefix}/include/ncursesw -I${readline_prefix}/include/readline ${CFLAGS}"
 	CXXFLAGS=$CFLAGS
 	_xlibs_deps="$pkg_name $(get_pkg_names_from_deps $pkg_build_deps)"
 	for pkg in $(cat $LIBNAME_LIST); do
@@ -364,22 +367,20 @@ custom_build() {
 				error "OHOS doesn't support X11 pci access"
 				# exit 1
 				reset_meson "$MESON_CROSS_FILE_BASE"
-				build_mesonproj_with_deps "$pkg" "$_xlibs_deps" "$MESON_CROSS_FILE_BASE"
-				mv_xorg_comp_to_prefix "$pkg"
+				build_mesonproj_with_deps "$pkg" "$_xlibs_deps" "$MESON_CROSS_FILE_BASE" || return 1
+				mv_xorg_comp_to_prefix "$pkg" || return 1
 				continue
 			;;
 			*)
 				# do nothing special
 			;;
 		esac
-		build_makeproj_with_deps "$pkg" "$_xlibs_deps" "$pkg_flags"
-		mv_xorg_comp_to_prefix "$pkg"
+		build_makeproj_with_deps "$pkg" "$_xlibs_deps" "$pkg_flags" || return 1
+		mv_xorg_comp_to_prefix "$pkg" || return 1
 	done
 	popd
 
 	popd
-
-	destroy_pycrossenv
 
 	_custom_build_continue=false
 }
@@ -393,14 +394,28 @@ postbuilt_hook() {
 
 mv_xorg_comp_to_prefix() {
 	local comp_name=$1
-	local original_dst=$(get_pkg_dst_dir $comp_name)
+	local original_dst
+	original_dst=$(get_pkg_dst_dir "$comp_name") || return 1
 
-	cp -r $original_dst/* ${XORG_PREFIX}/
-	rm -rf $original_dst
+	if [ -z "$original_dst" ] || [ "$original_dst" = "/" ] || [ ! -d "$original_dst" ]; then
+		error "invalid xorg component output for '${comp_name}': '${original_dst}'"
+		return 1
+	fi
+	case "$original_dst" in
+		"${target_root_prefix_without_pkgname}".*|"${native_project_root}"/dist."${OHOS_CPU}".*)
+			:
+			;;
+		*)
+			error "refusing to merge unsafe xorg component output for '${comp_name}': '${original_dst}'"
+			return 1
+			;;
+	esac
+
+	cp -a "$original_dst"/. "${XORG_PREFIX}/" || return 1
+	rm -rf "$original_dst"
 	# fix patching for Xorg libs like util-macros (pc in share dir)
 	patch_libdir_origin "xorg" "" "" "${XORG_PREFIX}/share"
 	if [ -d "${XORG_PREFIX}/${OHOS_LIBDIR}" ]; then
 		patch_libdir_origin "xorg"
 	fi
 }
-

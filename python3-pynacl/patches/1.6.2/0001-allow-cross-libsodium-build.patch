@@ -1,0 +1,36 @@
+--- a/setup.py
++++ b/setup.py
+@@ -15,6 +15,7 @@ import functools
+ import glob
+ import os
+ import os.path
++import shlex
+ import platform
+ import shutil
+ import subprocess
+@@ -144,6 +145,9 @@ class build_clib(_build_clib):
+             configure_flags.append("--disable-ssp")
+         if os.environ.get("SODIUM_INSTALL_MINIMAL"):
+             configure_flags.append("--enable-minimal")
++        extra_configure_args = os.environ.get("SODIUM_CONFIGURE_ARGS")
++        if extra_configure_args:
++            configure_flags.extend(shlex.split(extra_configure_args))
+         subprocess.check_call(
+             [configure]
+             + configure_flags
+@@ -155,9 +159,10 @@ class build_clib(_build_clib):
+         # Build the library
+         subprocess.check_call([make_command] + make_args, cwd=build_temp)
+ 
+-        # Check the build library
+-        subprocess.check_call(
+-            [make_command, "check"] + make_args, cwd=build_temp
+-        )
++        if not os.environ.get("SODIUM_SKIP_MAKE_CHECK"):
++            # Check the build library
++            subprocess.check_call(
++                [make_command, "check"] + make_args, cwd=build_temp
++            )
+ 
+         # Install the built library
+         subprocess.check_call(

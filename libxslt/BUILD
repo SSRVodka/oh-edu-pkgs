@@ -10,18 +10,25 @@ set -Eeuo pipefail
 setup() {
 
 # TODO: please fill in the variables for this package
+#
+# Keep setup() metadata-only. Do not resolve dependency paths or expand
+# build-time environment here. For example, do not call get_pkg_dst_dir and do
+# not read HOST_PYTHON_DIST, NUMPY*_LIBROOT, target_root_*, CFLAGS or LDFLAGS
+# while assigning pkg_build_* flags. Compute those dynamic flags in
+# custom_build/post_configure_hook instead.
 
 # [REQUIRED, NON-EMPTY, SEMVER]
-pkg_version="4.3.9"
+pkg_version="1.1.45"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
-pkg_name="ffmpeg"
+pkg_name="libxslt"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps="libz>=1.0,xz>=5.0,libaacplus>=2.0,x264,libiconv>=1.15"
+pkg_deps="libxml2>=2"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="libz>=1.0,xz>=5.0,libaacplus>=2.0,x264,libiconv>=1.15"
+# NOTE: you need to add build deps "python3,python3-build,python3-setuptools" if you use setup_pycrossenv in hooks
+pkg_build_deps="libxml2>=2"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
-pkg_source_url="https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n4.3.9.zip"
+pkg_source_url="https://gitlab.gnome.org/GNOME/libxslt/-/archive/v1.1.45/libxslt-v1.1.45.zip"
 # [OPTIONAL, VALID-URL]
 pkg_release_url=""
 ###################################################
@@ -29,11 +36,27 @@ pkg_license="Apache-2.0"
 # [REQUIRED, NON-EMPTY, seperated by commas, NO-SPACE]. e.g., x86_64,aarch64,arm,riscv
 pkg_support_archs="x86_64,aarch64,arm"
 # [REQUIED, NON-EMPTY]
-# choose one: "autotools" (configure and make), "cmake", "meson"
-pkg_build_type="autotools"
+# choose one: "autotools" (configure and make), "cmake", "meson", "pure-python", "pyo3-rust", "custom"
+# NOTE:
+#  - "pure-python" is ONLY valid for those packages without ANY native package dependency.
+#  - "pyo3-rust" is for maturin/PyO3 Rust extension packages; rustup/cargo/rustc and Rust targets must be prepared before build.
+#  - "custom" will skip the default build process
+#  - add "python3,python3-build,python3-wheel,python3-setuptools" to pkg_build_deps if you use "pure-python"
+#  - add "python3" to pkg_build_deps if you use "pyo3-rust"
+#  - add "python3" to pkg_build_deps if you use "meson"
+#  - you are responsible to set setup_pycrossenv if you set pkg_build_type == "meson", ensure meson, and use destroy_pycrossenv before finishing building this package.
+#  - do not run "rustup target add" or "pip install maturin" in BUILD hooks; maturin is managed by .ohloha/host-venv.
+#  - for PEP 517 Python packages, prefer build isolation and use --no-deps if
+#    you only need to avoid runtime dependencies. --no-build-isolation means
+#    build backends like hatchling must be installed in the crossenv build side
+#    via ${PYCROSS_BUILD_PIP}; installing them in ${HOST_TOOLS_PYTHON} is not enough.
+pkg_build_type="cmake"
 # [OPTIONAL]
 pkg_build_parallism=""
-pkg_patch_files="patches/${pkg_version}/0001-remove-non-clang-compiler-probes.patch"
+# [OPTIONAL: empty or Y]
+pkg_force_clean_build=""
+# [OPTIONAL, separated by commas, NO-SPACE]. Relative paths are resolved from this package directory, then repo root.
+pkg_patch_files=""
 
 ####### build type related (all OPTIONAL) #######
 
@@ -44,7 +67,7 @@ pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
 pkg_build_autotools_make_install_target=""
 
-pkg_build_cmake_extra_cmake_flags=""
+pkg_build_cmake_extra_cmake_flags="-DBUILD_SHARED_LIBS=ON -DLIBXSLT_WITH_PYTHON=OFF -DLIBXSLT_WITH_TESTS=OFF -DLIBXSLT_WITH_PROGRAMS=OFF"
 pkg_build_cmake_extra_cmake_prefix_path=""
 pkg_build_cmake_extra_cflags=""
 # NOTE: C preprocessor not CXX
@@ -52,7 +75,7 @@ pkg_build_cmake_extra_cppflags=""
 pkg_build_cmake_extra_ldflags=""
 pkg_build_cmake_extra_cmake_findroot_path=""
 
-# fill in a relative path to this script
+# fill in a absolute path
 pkg_build_meson_cross_file=""
 pkg_build_meson_extra_meson_flags=""
 pkg_build_meson_extra_cflags=""
@@ -72,17 +95,22 @@ pkg_build_meson_extra_cmake_findroot_path=""
 #  5. important cross-compiling variables will be reset after building each package (like CFLAGS, CXXFLAGS, LDFLAGS, CC, CXX, AR, PKG_CONFIG_LIBDIR, ...)
 #  6. you can use helper functions in setup.sh
 #  7. you can define your own function here but you can only use it for this package. If you want to define a function for building process of multiple packages, you should modify the setup.sh
+#  8. you are responsible to handle all the failures in hooks (commands may continue if you not deal with it)
 # 
 # Available global variables:
 #  - ${native_project_root}: the parent directory of setup.sh
 #  - ${native_sources_root}: root for native sources (staging area)
 #  - cross-compiling variables (reset for each package): CC, CXX, AR, CFLAGS, PKG_CONFIG_*, ...
-#  - global configurations: OHOS_ARCH, OHOS_CPU, OHOS_LIBDIR, HOST_SYSROOT, ... (see setup.sh)
+#  - global configurations: OHOS_ARCH, OHOS_CPU, OHOS_LIBDIR, PATCH_FILE_ROOT, MESON_CROSS_ROOT, HOST_SYSROOT, ... (see setup.sh)
+#  - Python crossenv paths: PY_CROSS_ROOT, HOST_SITE_PKGS, PYCROSS_CROSS_PYTHON,
+#    PYCROSS_CROSS_PIP, PYCROSS_BUILD_PIP, PYPKG_OUTPUT_WHEEL_DIR; do not hardcode crossenv_<cpu>
+#  - Python package helpers archive wheels to ${PYPKG_OUTPUT_WHEEL_DIR}; keep it as generated output.
 # Available local variables (except for native_env_hook):
 #  - ${current_source_url}: user configured `pkg_source_url` above (in `setup()`)
 #  - ${current}: the location (directory) of this script
 #  - ${sources_root}: the suggested root directory of the source directory
 #  - ${current_source_root}: the current source directory to be compiled
+#  - ${current_build_root}: the generated build directory after configure/setup and before compiling
 #  - ${target_root_with_pkgname}: output directory generated by the building process. i.e. the staging area for this package manager
 #  - ${target_root_prefix_without_pkgname}: Now ${target_root_prefix_without_pkgname}.<pkgname> == ${target_root_with_pkgname}
 #########################################
@@ -90,7 +118,7 @@ pkg_build_meson_extra_cmake_findroot_path=""
 # Hook: called before setup.sh is sourced
 # NOTE:
 #  - failure in this function will terminate this script immediately
-#  - you can NOT use local variables defined above. you can only use ${native_project_root}, ${native_sources_root} built by builder.sh
+#  - you can NOT use local variables defined above. you can only use ${native_project_root}, ${native_sources_root}, ${native_dst_root} built by builder.sh
 native_env_hook() {
 	:
 }
@@ -117,11 +145,7 @@ prebuilt_patch_hook() {
 # Hook: same as `prebuilt_patch_hook` but executed once if the source directory is not changed (mark file PATCHED)
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
-	pushd ${current_source_root}
-	local configure_patch
-	configure_patch=$(get_pkg_patch_files)
-	patch -N configure < "$configure_patch" >&2
-	popd
+	:
 }
 
 # Hook: customize building process.
@@ -130,55 +154,17 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
-	pushd ${current_source_root}
-	
-	local ff_deps=$(get_pkg_names_from_deps "$pkg_build_deps")
-	local dep
-	for dep in $ff_deps; do
-		CFLAGS="$CFLAGS -I$(get_pkg_dst_dir $dep)/include"
-		LDFLAGS="$LDFLAGS -L$(get_pkg_dst_dir $dep)/${OHOS_LIBDIR}"
-		PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR:$(get_pkg_dst_dir $dep)/${OHOS_LIBDIR}/pkgconfig"
-	done
-	CFLAGS="${CFLAGS} --target=${OHOS_CPU}-linux-ohos"
-	CXXFLAGS="$CFLAGS"
-	ASFLAGS="--target=${OHOS_CPU}-linux-ohos"
-	CPPFLAGS="${CFLAGS}"
-	# ffmpeg doesn't support CC hack so we use original CC
-	CC=${OHOS_SDK}/native/llvm/bin/clang
-	CXX=${OHOS_SDK}/native/llvm/bin/clang++
+	_custom_build_continue=true
+}
 
-	./configure --enable-cross-compile \
-		--cpu="generic" \
-		--arch="${OHOS_CPU}" \
-		--nm="${NM}" \
-		--ar="${AR}" \
-		--strip="${STRIP}" \
-		--cc="${CC}" \
-		--cxx="${CXX}" \
-		--ld="${CC} --target=${OHOS_CPU}-linux-ohos" \
-		--ranlib="${RANLIB}" \
-		--enable-pic \
-		--prefix="${target_root_prefix_without_pkgname}" \
-		--libdir="${target_root_prefix_without_pkgname}/${OHOS_LIBDIR}" \
-		--enable-gpl \
-		--enable-nonfree \
-		--enable-shared \
-		--enable-version3 \
-		--enable-libx264 \
-		--extra-libs=-ldl
-		# cannot use llvm-as. Use clang instead
-		#--as="${AS}" \
-	make -j
-	make install
-
-	popd
-	
-	mv_pkg_to_dst_dir $pkg_name
-
-	patch_libdir_origin "ffmpeg"
-
-	# use our own build process only
-	_custom_build_continue=false
+# Hook: called after configure/generate/setup stage and before compiling.
+#  - autotools: after configure and before make
+#  - cmake: after cmake configure and before cmake --build
+#  - meson: after meson setup and before ninja
+#  - not called for pkg_build_type="custom"
+#  - not called by the default build path when custom_build sets _custom_build_continue=false
+post_configure_hook() {
+	:
 }
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)

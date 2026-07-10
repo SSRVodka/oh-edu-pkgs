@@ -1764,6 +1764,47 @@ setup_pycrossenv() {
         return 1
     }
 
+    ensure_pycrossenv_python_config_wrappers || {
+        destroy_pycrossenv || true
+        return 1
+    }
+}
+
+ensure_pycrossenv_python_config_wrappers() {
+    local cross_bin="${PY_CROSS_ROOT}/cross/bin"
+    local wrapper=""
+    local target=""
+    local script_name=""
+
+    mkdir -p "${cross_bin}" || return 1
+    for script_name in "python3-config" "python${PY_VERSION}-config"; do
+        target="${HOST_PYTHON_DIST}/bin/${script_name}"
+        if [ ! -x "${target}" ]; then
+            error "missing target Python config script: ${target}"
+            return 1
+        fi
+        wrapper="${cross_bin}/${script_name}"
+        cat > "${wrapper}" <<EOF
+#!/bin/sh
+set -e
+output=\$("${target}" "\$@")
+append_extra_ldflags=false
+for arg in "\$@"; do
+    case "\${arg}" in
+        --ldflags|--libs)
+            append_extra_ldflags=true
+            ;;
+    esac
+done
+if [ "\${append_extra_ldflags}" = true ]; then
+        if [ -n "\${PYCROSS_PYTHON_CONFIG_EXTRA_LDFLAGS:-}" ]; then
+            output="\${output} \${PYCROSS_PYTHON_CONFIG_EXTRA_LDFLAGS}"
+        fi
+fi
+printf '%s\\n' "\${output}"
+EOF
+        chmod +x "${wrapper}" || return 1
+    done
 }
 
 destroy_pycrossenv() {

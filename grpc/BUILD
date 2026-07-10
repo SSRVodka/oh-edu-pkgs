@@ -19,7 +19,7 @@ pkg_name="grpc"
 pkg_deps="libz>=1.0,openssl>=3.0"
 # [OPTIONAL, seperated by commas, NO-SPACE]
 # NOTE: you need to add build deps "python3,python3-build,python3-setuptools" if you use setup_pycrossenv in hooks
-pkg_build_deps="libz>=1.0,openssl>=3.0"
+pkg_build_deps="libz>=1.0,openssl>=3.0,python3>=3.9,python3-build,python3-setuptools,python3-wheel,python3-cython,python3-typing-extensions>=4.12,<5,python3-protobuf>=6.31.1,<7.0.0"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://github.com/grpc/grpc"
@@ -129,14 +129,15 @@ native_env_hook() {
     fi
 
 	if [ ! -d "${grpc_native_src_root}" ]; then
-		mkdir -p ${grpc_native_src_root}
-		git clone -b v${pkg_version} ${pkg_source_url} ${grpc_native_src_root}
-		pushd ${grpc_native_src_root}
-		git submodule update --init
-		pushd third_party/protobuf
-		git checkout v33.5
-		popd
-		popd
+		mkdir -p "${grpc_native_src_root}" || return 1
+		git clone -b "v${pkg_version}" "${pkg_source_url}" "${grpc_native_src_root}" || return 1
+		pushd "${grpc_native_src_root}" >/dev/null || return 1
+		git submodule update --init || { popd >/dev/null; return 1; }
+		pushd third_party/protobuf >/dev/null || { popd >/dev/null; return 1; }
+		git checkout v33.5 || { popd >/dev/null; popd >/dev/null; return 1; }
+		popd >/dev/null || return 1
+		verify_grpc_submodules || { popd >/dev/null; return 1; }
+		popd >/dev/null || return 1
 	fi
 
 	cmake -DCMAKE_VERBOSE_MAKEFILE=ON \
@@ -161,17 +162,38 @@ native_env_hook() {
 custom_download_source() {
 
 	if [ ! -d "${current_source_root}" ]; then
-		mkdir -p ${current_source_root}
-		git clone -b v${pkg_version} ${pkg_source_url} ${current_source_root}
-		pushd ${current_source_root}
-		git submodule update --init
-		pushd third_party/protobuf
-		git checkout v33.5
-		popd
-		popd
+		mkdir -p "${current_source_root}" || return 1
+		git clone -b "v${pkg_version}" "${pkg_source_url}" "${current_source_root}" || return 1
+		pushd "${current_source_root}" >/dev/null || return 1
+		git submodule update --init || { popd >/dev/null; return 1; }
+		pushd third_party/protobuf >/dev/null || { popd >/dev/null; return 1; }
+		git checkout v33.5 || { popd >/dev/null; popd >/dev/null; return 1; }
+		popd >/dev/null || return 1
+		verify_grpc_submodules || { popd >/dev/null; return 1; }
+		popd >/dev/null || return 1
 	fi
 
 	_custom_download_source_continue=false
+}
+
+verify_grpc_submodules() {
+	local missing=0
+	local required_path
+	local required_paths=(
+		"third_party/abseil-cpp/CMakeLists.txt"
+		"third_party/cares/cares/CMakeLists.txt"
+		"third_party/protobuf/CMakeLists.txt"
+		"third_party/re2/CMakeLists.txt"
+		"third_party/zlib/CMakeLists.txt"
+	)
+
+	for required_path in "${required_paths[@]}"; do
+		if [ ! -f "$required_path" ]; then
+			error "grpc submodule is incomplete: ${required_path}"
+			missing=1
+		fi
+	done
+	return "$missing"
 }
 
 ############### DO NOT MODIFY THIS PART #################
@@ -202,7 +224,143 @@ custom_build() {
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	:
+	build_grpc_python_wheels
 }
 
 ################ self-defined functions (local) goes below ################
+
+build_grpc_python_wheels() {
+	local build_rc=0
+	local wheel_root="${target_root_with_pkgname}/python-wheels"
+	local grpcio_wheel_dir="${current_work_root}/wheels/grpc-python/grpcio"
+	local grpcio_tools_wheel_dir="${current_work_root}/wheels/grpc-python/grpcio-tools"
+	local openssl_prefix
+	local saved_cflags="${CFLAGS:-}"
+	local saved_cxxflags="${CXXFLAGS:-}"
+	local saved_ldflags="${LDFLAGS:-}"
+	local saved_grpc_python_cflags="${GRPC_PYTHON_CFLAGS:-}"
+	local saved_grpc_python_ldflags="${GRPC_PYTHON_LDFLAGS:-}"
+	local saved_grpc_python_build_system_openssl="${GRPC_PYTHON_BUILD_SYSTEM_OPENSSL:-}"
+	local saved_grpc_python_build_with_cython="${GRPC_PYTHON_BUILD_WITH_CYTHON:-}"
+
+	openssl_prefix=$(get_pkg_dst_dir openssl) || return 1
+	rm -rf "$wheel_root" "$grpcio_wheel_dir" "$grpcio_tools_wheel_dir"
+	mkdir -p "$wheel_root" "$grpcio_wheel_dir" "$grpcio_tools_wheel_dir" || return 1
+
+	setup_pycrossenv || return 1
+	"${PYCROSS_BUILD_PIP}" install "cython==3.1.1" || build_rc=$?
+
+	if [ "$build_rc" -eq 0 ]; then
+		export GRPC_PYTHON_BUILD_SYSTEM_OPENSSL=1
+		export GRPC_PYTHON_BUILD_WITH_CYTHON=1
+		export GRPC_PYTHON_CFLAGS="-std=c++17 -fno-wrapv -frtti -O1 -I${openssl_prefix}/include ${CFLAGS:-}"
+		export GRPC_PYTHON_LDFLAGS="-L${openssl_prefix}/${OHOS_LIBDIR} ${LDFLAGS:-}"
+
+		pushd "${current_source_root}" >/dev/null || build_rc=$?
+		if [ "$build_rc" -eq 0 ]; then
+			"${PYCROSS_CROSS_PIP}" wheel \
+				--wheel-dir "$grpcio_wheel_dir" \
+				-v --no-deps --no-build-isolation --no-binary :all: . || build_rc=$?
+			popd >/dev/null || {
+				[ "$build_rc" -eq 0 ] && build_rc=1
+			}
+		fi
+	fi
+
+	if [ "$build_rc" -eq 0 ]; then
+		pushd "${current_source_root}/tools/distrib/python/grpcio_tools" >/dev/null || build_rc=$?
+		if [ "$build_rc" -eq 0 ]; then
+			prepare_grpcio_tools_sources_without_bazel || build_rc=$?
+			if [ "$build_rc" -eq 0 ]; then
+				"${PYCROSS_CROSS_PIP}" wheel \
+					--wheel-dir "$grpcio_tools_wheel_dir" \
+					-v --no-deps --no-build-isolation --no-binary :all: . || build_rc=$?
+			fi
+			popd >/dev/null || {
+				[ "$build_rc" -eq 0 ] && build_rc=1
+			}
+		fi
+	fi
+
+	if [ "$build_rc" -eq 0 ]; then
+		cp -f "$grpcio_wheel_dir"/*.whl "$wheel_root/" || build_rc=$?
+	fi
+	if [ "$build_rc" -eq 0 ]; then
+		cp -f "$grpcio_tools_wheel_dir"/*.whl "$wheel_root/" || build_rc=$?
+	fi
+	if [ "$build_rc" -eq 0 ]; then
+		archive_python_wheels "$wheel_root" || build_rc=$?
+	fi
+
+	CFLAGS="$saved_cflags"
+	CXXFLAGS="$saved_cxxflags"
+	LDFLAGS="$saved_ldflags"
+	export GRPC_PYTHON_CFLAGS="$saved_grpc_python_cflags"
+	export GRPC_PYTHON_LDFLAGS="$saved_grpc_python_ldflags"
+	export GRPC_PYTHON_BUILD_SYSTEM_OPENSSL="$saved_grpc_python_build_system_openssl"
+	export GRPC_PYTHON_BUILD_WITH_CYTHON="$saved_grpc_python_build_with_cython"
+	destroy_pycrossenv || {
+		[ "$build_rc" -eq 0 ] && build_rc=1
+	}
+
+	return "$build_rc"
+}
+
+prepare_grpcio_tools_sources_without_bazel() {
+	local grpc_tools_root="${current_source_root}/tools/distrib/python/grpcio_tools"
+
+	rm -rf \
+		"${grpc_tools_root}/grpc_root" \
+		"${grpc_tools_root}/third_party/abseil-cpp" \
+		"${grpc_tools_root}/third_party/protobuf"
+
+	mkdir -p \
+		"${grpc_tools_root}/grpc_root" \
+		"${grpc_tools_root}/third_party/abseil-cpp" \
+		"${grpc_tools_root}/third_party/protobuf" || return 1
+
+	cp -a "${current_source_root}/include" "${grpc_tools_root}/grpc_root/" || return 1
+	mkdir -p "${grpc_tools_root}/grpc_root/src" || return 1
+	cp -a "${current_source_root}/src/compiler" "${grpc_tools_root}/grpc_root/src/" || return 1
+	cp -a "${current_source_root}/third_party/abseil-cpp/absl" "${grpc_tools_root}/third_party/abseil-cpp/" || return 1
+	cp -a "${current_source_root}/third_party/protobuf/src" "${grpc_tools_root}/third_party/protobuf/" || return 1
+	cp -a "${current_source_root}/third_party/protobuf/upb" "${grpc_tools_root}/third_party/protobuf/" || return 1
+	cp -a "${current_source_root}/third_party/protobuf/upb_generator" "${grpc_tools_root}/third_party/protobuf/" || return 1
+	mkdir -p "${grpc_tools_root}/third_party/protobuf/third_party" || return 1
+	cp -a "${current_source_root}/third_party/protobuf/third_party/utf8_range" "${grpc_tools_root}/third_party/protobuf/third_party/" || return 1
+
+	"${HOST_TOOLS_PYTHON}" - "${grpc_tools_root}/protoc_lib_deps.py" "${grpc_tools_root}" <<'PY'
+import ast
+import pathlib
+import pprint
+import sys
+
+deps_path = pathlib.Path(sys.argv[1])
+root = pathlib.Path(sys.argv[2])
+module = ast.parse(deps_path.read_text())
+assignments = {
+    node.targets[0].id: node
+    for node in module.body
+    if isinstance(node, ast.Assign)
+    and len(node.targets) == 1
+    and isinstance(node.targets[0], ast.Name)
+}
+cc_node = assignments.get("CC_FILES")
+if cc_node is None:
+    raise SystemExit("CC_FILES not found in protoc_lib_deps.py")
+cc_files = ast.literal_eval(cc_node.value)
+missing = [path for path in cc_files if not (root / path).is_file()]
+if missing:
+    cc_files = [path for path in cc_files if path not in set(missing)]
+    text = deps_path.read_text()
+    start = cc_node.value.lineno - 1
+    end = cc_node.value.end_lineno
+    lines = text.splitlines()
+    replacement = "CC_FILES=" + pprint.pformat(cc_files, indent=4, width=79)
+    lines[start:end] = replacement.splitlines()
+    deps_path.write_text("\n".join(lines) + "\n")
+    print("Removed missing grpcio-tools sources:")
+    for path in missing:
+        print("  " + path)
+PY
+}

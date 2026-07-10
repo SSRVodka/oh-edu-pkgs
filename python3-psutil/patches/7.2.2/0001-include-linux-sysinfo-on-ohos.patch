@@ -1,0 +1,35 @@
+--- a/psutil/arch/linux/mem.c
++++ b/psutil/arch/linux/mem.c
+@@ -5,6 +5,9 @@
+  */
+ 
+ #include <Python.h>
+ #include <sys/sysinfo.h>
++#ifdef __OPENHARMONY__
++#include <linux/sysinfo.h>
++#endif
+ 
+ #include "../../arch/all/init.h"
+ 
+--- a/psutil/arch/posix/init.h
++++ b/psutil/arch/posix/init.h
+@@ -14,7 +14,7 @@
+ #endif
+ 
+ // clang-format off
+-#if !defined(PSUTIL_OPENBSD) && !defined(PSUTIL_AIX)
++#if !defined(PSUTIL_OPENBSD) && !defined(PSUTIL_AIX) && !defined(__OPENHARMONY__)
+     #define PSUTIL_HAS_POSIX_USERS
+     PyObject *psutil_users(PyObject *self, PyObject *args);
+ #endif
+--- a/psutil/arch/posix/init.c
++++ b/psutil/arch/posix/init.c
+@@ -56,7 +56,7 @@ static PyMethodDef posix_methods[] = {
+ #if defined(PSUTIL_BSD) || defined(PSUTIL_OSX)
+     {"net_if_duplex_speed", psutil_net_if_duplex_speed, METH_VARARGS},
+ #endif
+-#if !defined(PSUTIL_OPENBSD) && !defined(PSUTIL_AIX)
++#ifdef PSUTIL_HAS_POSIX_USERS
+     {"users", psutil_users, METH_VARARGS},
+ #endif
+ #if defined(PSUTIL_OSX) || defined(PSUTIL_BSD)

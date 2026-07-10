@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ohloha Package Migration"
+  short_description: "Migrate ohloha packages by package type"
+  default_prompt: "Use $ohloha-package-migration to migrate or debug an ohloha_pkgs package by category."

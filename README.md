@@ -6,7 +6,7 @@ ohloha 包管理器的包迁移仓库，存放着各种系统依赖库的编译�
 
 通过 [`ohloha`](https://gitcode.com/openharmony-robot/tools_ohloha) ([gh mirror](https://github.com/SSRVodka/oh-packager)) 支持并发编译、缓存等能力。
 
-AI 友好：提供了 `AGENTS.md`, `DESIGN.md` 文档，以及一个迁移 pure-python 类型包的 skill（位于 `.skills` 下）。
+AI 友好：提供了 `AGENTS.md`, `DESIGN.md` 文档，以及迁移包的 skill（位于 `.skills` 下，对于 codex 可使用 `cp -r .skills/* ~/.codex/skills/` 安装）。
 
 ### 进度
 
@@ -15,7 +15,7 @@ AI 友好：提供了 `AGENTS.md`, `DESIGN.md` 文档，以及一个迁移 pure-
 
 - [x] Python 解释器，及常见 native 库：libaacplus、x264、alsa-lib、ffmpeg、bzip2、gettext、libffi、ncurses、OpenBLAS、openssl、readline、sqlite3、xz、zlib；
 
-- [x] Python 第三方库：numpy、scipy、opencv、onnxruntime；
+- [x] Python 第三方库：numpy、scipy、opencv、onnxruntime、openai；
 
 - [ ] ...
 
