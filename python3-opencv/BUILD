@@ -17,9 +17,9 @@ pkg_version="4.11.0"
 pkg_name="python3-opencv"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
 # NOTE: python3>=3.9 use numpy>=2. See https://github.com/opencv/opencv-python/blob/4.x/pyproject.toml
-pkg_deps="python3>=3.9,python3-numpy>=2,openblas,ffmpeg>=4,python3-wheel,python3-setuptools"
+pkg_deps="python3>=3.9,python3-numpy>=2,openblas,ffmpeg<8"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="python3>=3.9,python3-numpy>=2,openblas,ffmpeg>=4,python3-wheel,python3-setuptools"
+pkg_build_deps="python3>=3.9,python3-numpy>=2,openblas,ffmpeg<8,python3-build,python3-setuptools,python3-wheel,python3-packaging"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://github.com/opencv/opencv-python.git"
@@ -100,11 +100,11 @@ native_env_hook() {
 # NOTE: you need to make sure the source locates in ${current_source_root}
 # 	if you set _custom_download_source_continue="false" caz default build process will use
 custom_download_source() {
-	
+	local opencv_python_release_tag="86"
+
 	rm -rf "${current_source_root}"
-	git clone "$pkg_source_url" "${current_source_root}" || return 1
+	git clone -b "$opencv_python_release_tag" "$pkg_source_url" "${current_source_root}" || return 1
 	pushd "${current_source_root}" || return 1
-	git switch 4.x || { popd; return 1; }
 	git submodule sync || { popd; return 1; }
 	git submodule update --init --recursive || { popd; return 1; }
 	popd || return 1
@@ -135,67 +135,100 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
-	# make opencv's cmake happy
-	mkdir -p "${target_root_prefix_without_pkgname}/include" || return 1
-	
+	local build_rc=0
+	local saved_cmake_args="${CMAKE_ARGS:-}"
+	local saved_cflags="${CFLAGS:-}"
+	local saved_cxxflags="${CXXFLAGS:-}"
+	local saved_cppflags="${CPPFLAGS:-}"
+	local saved_ldflags="${LDFLAGS:-}"
+	local saved_pkg_config_libdir="${PKG_CONFIG_LIBDIR:-}"
+	local saved_enable_contrib="${ENABLE_CONTRIB:-}"
+	local saved_enable_headless="${ENABLE_HEADLESS:-}"
+
 	setup_pycrossenv || return 1
+	"${PYCROSS_BUILD_PIP}" install "scikit-build>=0.14.0" packaging || build_rc=$?
 
-	pushd "${current_source_root}" || { destroy_pycrossenv || true; return 1; }
-	# use $CFLAGS in env when building a python pkg
-	build_cmakeproj_with_deps "opencv" "$(get_pkg_names_from_deps "$pkg_build_deps")" "\
-		-DCMAKE_FIND_ROOT_PATH=${HOST_PYTHON_DIST} \
-		-DPYTHON_INCLUDE_DIRS=${HOST_PYTHON_DIST}/include \
-		-DPYTHON3_INCLUDE_PATH=${HOST_PYTHON_DIST}/include/python${PY_VERSION} \
-		-DPYTHON3_LIBRARIES=${HOST_PYTHON_DIST}/${OHOS_LIBDIR}/libpython${PY_VERSION}.so \
-		-DPYTHON3_NUMPY_INCLUDE_DIRS=${NUMPY2_LIBROOT}/include" \
-		"" \
-		"$CFLAGS" \
-		"-D__MUSL__ -D__OPENHARMONY__ -D__OHOS__" \
-		"$LDFLAGS" \
-		"20" \
-	|| { error "build_cmakeproj_with_deps failed"; popd; destroy_pycrossenv || true; return 1; }
+	if [ "$build_rc" -eq 0 ]; then
+		prepare_opencv_python_build_env || build_rc=$?
+	fi
+	if [ "$build_rc" -eq 0 ]; then
+		build_python_cross_package_active -v --no-deps --no-build-isolation --no-binary :all: . || build_rc=$?
+	fi
 
-	popd
+	CMAKE_ARGS="$saved_cmake_args"
+	CFLAGS="$saved_cflags"
+	CXXFLAGS="$saved_cxxflags"
+	CPPFLAGS="$saved_cppflags"
+	LDFLAGS="$saved_ldflags"
+	PKG_CONFIG_LIBDIR="$saved_pkg_config_libdir"
+	export ENABLE_CONTRIB="$saved_enable_contrib"
+	export ENABLE_HEADLESS="$saved_enable_headless"
 
-	destroy_pycrossenv || return 1
+	destroy_pycrossenv || {
+		[ "$build_rc" -eq 0 ] && build_rc=1
+	}
 
 	_custom_build_continue=false
+	return "$build_rc"
 }
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	local _cv2_pkg_dir
-	local _cv2_so
-
-	_cv2_pkg_dir="$(get_pkg_dst_dir opencv)/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages/cv2"
-	_cv2_so="${_cv2_pkg_dir}/python-${PY_VERSION}/cv2.cpython-${PY_VERSION_CODE}-${OHOS_CPU}-linux-ohos.so"
-
-	if [ ! -d "${_cv2_pkg_dir}" ]; then
-		error "missing cv2 package directory: ${_cv2_pkg_dir}"
-		return 1
-	fi
-	if [ ! -f "${_cv2_so}" ]; then
-		error "missing cv2 extension: ${_cv2_so}"
-		return 1
-	fi
-
-	# patch dylib
-	patchelf --add-needed "libpython${PY_VERSION}.so" "${_cv2_so}" || return 1
-	
-	local _pkgd=opencv_python-4.11.0.86
-	local _pkgw=${_pkgd}.dist-info
-	local _zipn=${_pkgd}-cp${PY_VERSION_CODE}-cp${PY_VERSION_CODE}-linux_${OHOS_CPU}
-
-	local out=${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages/
-	mkdir -p "${out}" || return 1
-	pushd "${out}" || return 1
-	cp -r "${_cv2_pkg_dir}" . || { popd; return 1; }
-	cp -r "${native_project_root}/${_pkgw}" . || { popd; return 1; }
-	"${native_project_root}/RECORD.GEN.sh" cv2 "${_pkgw}" > RECORD || { popd; return 1; }
-	mv RECORD "${_pkgw}" || { popd; return 1; }
-	zip -r "${_zipn}.zip" "${_pkgw}" cv2 || { popd; return 1; }
-	mv "${_zipn}.zip" "${PYPKG_OUTPUT_WHEEL_DIR}/${_zipn}.whl" || { popd; return 1; }
-	popd || return 1
+	install_current_python_wheelhouse_to_target_site_packages || return 1
+	patch_opencv_python_extension_rpaths
 }
 
 ################ self-defined functions (local) goes below ################
+
+patch_opencv_python_extension_rpaths() {
+	local extension
+	local -a extensions=()
+
+	mapfile -t extensions < <(find "${target_root_with_pkgname}/lib" -path "*/site-packages/cv2/*.so" -type f | sort)
+	for extension in "${extensions[@]}"; do
+		if file "$extension" | grep -q "ELF.*shared object"; then
+			patchelf --set-rpath '$ORIGIN:$ORIGIN/../../..' "$extension" || return 1
+		fi
+	done
+}
+
+prepare_opencv_python_build_env() {
+	local deps
+	local dep
+	local dep_prefix
+	local extra_cflags=""
+	local extra_ldflags=""
+	local extra_cmake_prefix=""
+	local extra_cmake_findroot=""
+	local extra_pkg_config_libdir=""
+
+	deps=$(get_pkg_names_from_deps "$pkg_build_deps")
+	for dep in $deps; do
+		case "$dep" in
+			python3-build|python3-setuptools|python3-wheel|python3-packaging)
+				continue
+				;;
+		esac
+		dep_prefix=$(get_pkg_dst_dir "$dep") || return 1
+		extra_cflags="-I${dep_prefix}/include ${extra_cflags}"
+		extra_ldflags="-L${dep_prefix}/${OHOS_LIBDIR} ${extra_ldflags}"
+		extra_cmake_findroot="${dep_prefix};${extra_cmake_findroot}"
+		extra_pkg_config_libdir="${dep_prefix}/${OHOS_LIBDIR}/pkgconfig:${extra_pkg_config_libdir}"
+		if [ -d "${dep_prefix}/${OHOS_LIBDIR}/cmake" ]; then
+			local item
+			for item in "${dep_prefix}/${OHOS_LIBDIR}/cmake"/*; do
+				[ -e "$item" ] || continue
+				extra_cmake_prefix="${item};${extra_cmake_prefix}"
+			done
+		fi
+	done
+
+	export CFLAGS="${extra_cflags} ${CFLAGS:-}"
+	export CXXFLAGS="${CFLAGS:-}"
+	export CPPFLAGS="${CFLAGS:-}"
+	export LDFLAGS="${extra_ldflags} ${LDFLAGS:-}"
+	export PKG_CONFIG_LIBDIR="${extra_pkg_config_libdir}${PKG_CONFIG_LIBDIR:-}"
+	export ENABLE_CONTRIB=0
+	export ENABLE_HEADLESS=0
+	export CMAKE_ARGS="${CMAKE_ARGS:-} -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_CONFIG} -DOHOS_ARCH=${OHOS_ARCH} -DSSRVODKA_APPEND_CMAKE_PREFIX_PATH=${extra_cmake_prefix} -DSSRVODKA_APPEND_C_PREPROCESSOR_FLAGS='-D__MUSL__ -D__OPENHARMONY__ -D__OHOS__' -DSSRVODKA_APPEND_CMAKE_FIND_ROOT_PATH=${extra_cmake_findroot} -DCMAKE_FIND_ROOT_PATH=${HOST_PYTHON_DIST};${extra_cmake_findroot} -DCMAKE_INSTALL_LIBDIR=${OHOS_LIBDIR} -DPYTHON_INCLUDE_DIRS=${HOST_PYTHON_DIST}/include -DPYTHON3_INCLUDE_DIR=${HOST_PYTHON_DIST}/include/python${PY_VERSION} -DPYTHON3_INCLUDE_PATH=${HOST_PYTHON_DIST}/include/python${PY_VERSION} -DPYTHON3_LIBRARY=${HOST_PYTHON_DIST}/${OHOS_LIBDIR}/libpython${PY_VERSION}.so -DPYTHON3_LIBRARIES=${HOST_PYTHON_DIST}/${OHOS_LIBDIR}/libpython${PY_VERSION}.so -DPYTHON3_NUMPY_INCLUDE_DIRS=${NUMPY2_LIBROOT}/include -DBUILD_opencv_python3=ON -DBUILD_opencv_python2=OFF -DBUILD_opencv_java=OFF -DOPENCV_PYTHON3_INSTALL_PATH=python -DINSTALL_CREATE_DISTRIB=ON -DBUILD_opencv_apps=OFF -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_DOCS=OFF -DWITH_QT=OFF -DWITH_GTK=OFF -DOPENCV_FFMPEG_ENABLE_LIBAVDEVICE=OFF"
+}

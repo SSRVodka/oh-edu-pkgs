@@ -16,10 +16,9 @@ pkg_version="4.11.0"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
 pkg_name="opencv"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-# NOTE: python3>=3.9 use numpy>=2. See https://github.com/opencv/opencv-python/blob/4.x/pyproject.toml
-pkg_deps="python3>=3.9,python3-numpy>=2,openblas,ffmpeg>=4"
+pkg_deps="openblas,ffmpeg<8"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="python3>=3.9,python3-numpy>=2,openblas,ffmpeg>=4"
+pkg_build_deps="openblas,ffmpeg<8"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://github.com/opencv/opencv-python.git"
@@ -100,11 +99,11 @@ native_env_hook() {
 # NOTE: you need to make sure the source locates in ${current_source_root}
 # 	if you set _custom_download_source_continue="false" caz default build process will use
 custom_download_source() {
-	
+	local opencv_python_release_tag="86"
+
 	rm -rf "${current_source_root}"
-	git clone "$pkg_source_url" "${current_source_root}" || return 1
+	git clone -b "$opencv_python_release_tag" "$pkg_source_url" "${current_source_root}" || return 1
 	pushd "${current_source_root}" || return 1
-	git switch 4.x || { popd; return 1; }
 	git submodule sync || { popd; return 1; }
 	git submodule update --init --recursive || { popd; return 1; }
 	popd || return 1
@@ -135,19 +134,15 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
-	# make opencv's cmake happy
-	mkdir -p "${target_root_prefix_without_pkgname}/include" || return 1
-	setup_pycrossenv || return 1
-	pkg_build_cmake_extra_cmake_flags="-S opencv -DCMAKE_FIND_ROOT_PATH=${HOST_PYTHON_DIST} -DPYTHON_INCLUDE_DIRS=${HOST_PYTHON_DIST}/include -DPYTHON3_INCLUDE_PATH=${HOST_PYTHON_DIST}/include/python${PY_VERSION} -DPYTHON3_LIBRARIES=${HOST_PYTHON_DIST}/${OHOS_LIBDIR}/libpython${PY_VERSION}.so -DPYTHON3_NUMPY_INCLUDE_DIRS=${NUMPY2_LIBROOT}/include"
+	pkg_build_cmake_extra_cmake_flags="-S opencv -DBUILD_SHARED_LIBS=ON -DBUILD_opencv_python3=OFF -DBUILD_opencv_python2=OFF -DBUILD_opencv_java=OFF -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_DOCS=OFF -DWITH_QT=OFF -DWITH_GTK=OFF -DOPENCV_FFMPEG_ENABLE_LIBAVDEVICE=OFF"
 	pkg_build_cmake_extra_cflags="$CFLAGS"
 	pkg_build_cmake_extra_ldflags="$LDFLAGS"
-	# continue to normal build process
 	_custom_build_continue=true
 }
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	destroy_pycrossenv || true
+	:
 }
 
 ################ self-defined functions (local) goes below ################
