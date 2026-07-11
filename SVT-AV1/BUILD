@@ -59,6 +59,7 @@ pkg_build_cmake_extra_cflags=""
 pkg_build_cmake_extra_cppflags=""
 pkg_build_cmake_extra_ldflags=""
 pkg_build_cmake_extra_cmake_findroot_path=""
+pkg_patch_files="patches/${pkg_version}/0001-fix-x86-simd-target-compile-options.patch"
 
 # fill in a absolute path
 pkg_build_meson_cross_file=""
@@ -120,13 +121,15 @@ fi
 
 # Hook: called before entering build dir
 prebuilt_patch_hook() {
-	sed -i '\|__OPENHARMONY__|! s|\(#if defined(__linux__) \&\& !defined(__ANDROID__)\)|\1 \&\& !defined(__OPENHARMONY__)|' ${current_source_root}/Source/Lib/Codec/svt_threads.h
+	sed -i '\|__OPENHARMONY__|! s|\(#if defined(__linux__) \&\& !defined(__ANDROID__)\)|\1 \&\& !defined(__OPENHARMONY__)|' "${current_source_root}/Source/Lib/Codec/svt_threads.h"
 }
 
 # Hook: same as `prebuilt_patch_hook` but executed once if the source directory is not changed (mark file PATCHED)
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
-	:
+	pushd "${current_source_root}" || return 1
+	apply_pkg_patches -p1
+	popd || return 1
 }
 
 # Hook: customize building process.

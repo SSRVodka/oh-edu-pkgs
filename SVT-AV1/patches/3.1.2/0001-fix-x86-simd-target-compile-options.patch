@@ -1,0 +1,51 @@
+--- a/Source/Lib/ASM_SSSE3/CMakeLists.txt
++++ b/Source/Lib/ASM_SSSE3/CMakeLists.txt
+@@ -44,8 +44,11 @@
+ set(asm_files
+     aom_subpixel_bilinear_ssse3.asm
+     aom_subpixel_8t_ssse3.asm
+     subpel_variance_ssse3.asm)
+ 
+ add_library(ASM_SSSE3 OBJECT ${all_files})
++if(NOT MSVC)
++    target_compile_options(ASM_SSSE3 PRIVATE $<$<COMPILE_LANGUAGE:C>:-mssse3>)
++endif()
+ 
+ asm_compile_to_target(ASM_SSSE3 ${asm_files})
+--- a/Source/Lib/ASM_SSE4_1/CMakeLists.txt
++++ b/Source/Lib/ASM_SSE4_1/CMakeLists.txt
+@@ -56,5 +56,10 @@
+     temporal_filtering_sse4_1.c
+     warp_plane_sse4.c
+     )
+ 
+ add_library(ASM_SSE4_1 OBJECT ${all_files})
++if(NOT MSVC)
++    target_compile_options(ASM_SSE4_1 PRIVATE
++        $<$<COMPILE_LANGUAGE:C>:-mssse3>
++        $<$<COMPILE_LANGUAGE:C>:-msse4.1>)
++endif()
+--- a/Source/Lib/ASM_AVX2/CMakeLists.txt
++++ b/Source/Lib/ASM_AVX2/CMakeLists.txt
+@@ -105,4 +105,7 @@
+     mc_avx2.asm
+     mc16_avx2.asm)
+ add_library(ASM_AVX2 OBJECT ${all_files})
++if(NOT MSVC)
++    target_compile_options(ASM_AVX2 PRIVATE $<$<COMPILE_LANGUAGE:C>:-mavx2>)
++endif()
+ asm_compile_to_target(ASM_AVX2 ${asm_files})
+--- a/Source/Lib/ASM_AVX512/CMakeLists.txt
++++ b/Source/Lib/ASM_AVX512/CMakeLists.txt
+@@ -65,3 +65,11 @@
+     )
+ 
+ add_library(ASM_AVX512 OBJECT ${all_files})
++if(NOT MSVC)
++    target_compile_options(ASM_AVX512 PRIVATE
++        $<$<COMPILE_LANGUAGE:C>:-mavx2>
++        $<$<COMPILE_LANGUAGE:C>:-mavx512f>
++        $<$<COMPILE_LANGUAGE:C>:-mavx512bw>
++        $<$<COMPILE_LANGUAGE:C>:-mavx512dq>
++        $<$<COMPILE_LANGUAGE:C>:-mavx512vl>)
++endif()
