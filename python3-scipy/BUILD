@@ -14,7 +14,7 @@ pkg_support_archs="x86_64,aarch64"
 pkg_build_type="custom"
 pkg_build_parallism="20"
 pkg_force_clean_build=""
-pkg_patch_files="patches/${pkg_version}/0001-duccfft-disable-pthread-affinity-on-ohos.patch"
+pkg_patch_files="patches/${pkg_version}/0001-duccfft-disable-pthread-affinity-on-ohos.patch,patches/${pkg_version}/0002-boost-math-use-128-bit-long-double-on-ohos.patch"
 
 pkg_build_autotools_extra_configure_flags=""
 pkg_build_autotools_bootstrap_script=""

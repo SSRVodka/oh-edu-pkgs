@@ -18,7 +18,7 @@ pkg_name="python3-numpy"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
 pkg_deps="openblas,python3>=3.9"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="openblas,python3>=3.9,python3-cython,python3-build"
+pkg_build_deps="openblas,python3>=3.9,python3-build"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
 pkg_source_url="https://github.com/numpy/numpy.git"
@@ -137,6 +137,8 @@ custom_build() {
 	
 	setup_pycrossenv || return 1
 
+	"${PYCROSS_BUILD_PIP}" install --upgrade "meson-python>=0.15.0" "Cython>=3.0.6" || { destroy_pycrossenv || true; return 1; }
+
 	local np_deps
 	np_deps=$(get_pkg_names_from_deps "$pkg_deps")
 	local np_dep
@@ -150,10 +152,11 @@ custom_build() {
 
 	set_meson_list $meson_cross "common_c_flags" "$CFLAGS"
 	set_meson_list $meson_cross "common_ld_flags" "$LDFLAGS"
+	replace_textline_with "cython = ''" "cython = '${PY_CROSS_ROOT}/build/bin/cython'" "$meson_cross" || { destroy_pycrossenv || true; return 1; }
 
 	pushd "${current_source_root}" || { destroy_pycrossenv || true; return 1; }
 	rm -rf ./dist || { popd; destroy_pycrossenv || true; return 1; }
-	python -m build --wheel -Csetup-args="--cross-file=${meson_cross}" || { popd; destroy_pycrossenv || true; return 1; }
+	python -m build --wheel --no-isolation -Csetup-args="--cross-file=${meson_cross}" || { popd; destroy_pycrossenv || true; return 1; }
 	pip install -v ./dist/*-cp${PY_VERSION_CODE}-cp${PY_VERSION_CODE}-linux_${OHOS_CPU}.whl || { popd; destroy_pycrossenv || true; return 1; }
 	
 	# copy wheel to destination for wheel distribution

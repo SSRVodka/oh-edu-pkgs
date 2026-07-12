@@ -186,48 +186,10 @@ ensure_host_tools() {
 	export PATH="${HOST_TOOLS_BIN}:$PATH"
 }
 
-find_host_libclang() {
-	if [ -n "${HOST_LIBCLANG:-}" ]; then
-		if [ ! -f "${HOST_LIBCLANG}" ]; then
-			error "HOST_LIBCLANG does not exist: ${HOST_LIBCLANG}"
-			return 1
-		fi
-		readlink -f "${HOST_LIBCLANG}"
-		return 0
-	fi
-
-	local candidate=""
-	for candidate in \
-		/usr/lib/llvm-*/lib/libclang.so \
-		/usr/lib/llvm-*/lib/libclang-*.so* \
-		/usr/lib/*/libclang.so \
-		/usr/lib/*/libclang-*.so*
-	do
-		[ -f "${candidate}" ] || continue
-		case "$(basename "${candidate}")" in
-			libclang-cpp*)
-				continue
-				;;
-		esac
-		readlink -f "${candidate}"
-		return 0
-	done
-
-	return 1
-}
-
 ensure_tool_wrappers_unlocked() {
 	ensure_symlink "${OHOS_SDK}/native/llvm/bin/llvm-strip" "${TOOL_WRAPPER_BIN}/strip"
 	ensure_symlink "${OHOS_SDK}/native/llvm/bin/llvm-profdata" "${TOOL_WRAPPER_BIN}/profdata"
 	rm -f "${TOOL_WRAPPER_BIN}/ld.lld"
-
-	local host_libclang=""
-	if host_libclang=$(find_host_libclang); then
-		mkdir -p "${TOOL_WRAPPER_LIBCLANG_DIR}"
-		ensure_symlink "${host_libclang}" "${TOOL_WRAPPER_LIBCLANG_DIR}/libclang.so"
-	else
-		rm -f "${TOOL_WRAPPER_LIBCLANG_DIR}/libclang.so"
-	fi
 
 	local ld_emulation=""
 	case "${OHOS_CPU}" in
@@ -546,11 +508,9 @@ export NM=${OHOS_SDK}/native/llvm/bin/llvm-nm
 export AR=${OHOS_SDK}/native/llvm/bin/llvm-ar
 export PROFDATA=${OHOS_SDK}/native/llvm/bin/llvm-profdata
 TOOL_WRAPPER_BIN=${OHLOHA_TOOL_WRAPPER_ROOT}/${OHOS_SDK_API_VERSION}/${OHOS_CPU}/bin
-TOOL_WRAPPER_LIBCLANG_DIR=${OHLOHA_TOOL_WRAPPER_ROOT}/${OHOS_SDK_API_VERSION}/${OHOS_CPU}/libclang
 mkdir -p "${TOOL_WRAPPER_BIN}"
 ensure_tool_wrappers
 export OHOS_LD_BINARY_INPUT_OR_CXX=${TOOL_WRAPPER_BIN}/ld.binary-input-or-cxx
-export HOST_LIBCLANG_LIBRARY_PATH=${TOOL_WRAPPER_LIBCLANG_DIR}
 #export CFLAGS="-fPIC -D__MUSL__=1 -D__OPENHARMONY__=1 -I${HOST_SYSROOT}/usr/include -I${HOST_SYSROOT}/usr/include/${OHOS_CPU}-linux-ohos"
 # keep track with ohos.toolchain.cmake + CMAKE_C_FLAGS_INIT
 # including arch-dependent headers

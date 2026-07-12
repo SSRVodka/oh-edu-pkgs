@@ -46,7 +46,7 @@ pkg_build_autotools_suffix_configure_flags=""
 pkg_build_autotools_configure_dir=""
 pkg_build_autotools_make_install_target=""
 
-pkg_build_cmake_extra_cmake_flags="-DOGRE_LIB_DIRECTORY=${OHOS_LIBDIR}"
+pkg_build_cmake_extra_cmake_flags="-DOGRE_LIB_DIRECTORY=${OHOS_LIBDIR} -DOGRE_BUILD_COMPONENT_CSHARP=OFF"
 pkg_build_cmake_extra_cmake_prefix_path=""
 pkg_build_cmake_extra_cflags=""
 # NOTE: C preprocessor not CXX

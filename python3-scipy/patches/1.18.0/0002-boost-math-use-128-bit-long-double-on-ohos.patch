@@ -1,0 +1,14 @@
+--- a/subprojects/boost_math/math/include/boost/math/special_functions/detail/fp_traits.hpp
++++ b/subprojects/boost_math/math/include/boost/math/special_functions/detail/fp_traits.hpp
+@@ -305,7 +305,8 @@ template<> struct fp_traits_non_native<long double, double_precision>
+ 
+ // long double (>64 bits), x86 and x64 -----------------------------------------
+ 
+-#elif defined(__i386) || defined(__i386__) || defined(_M_IX86) \
++#elif !(defined(__OPENHARMONY__) && (LDBL_MANT_DIG == 113)) \
++    && (defined(__i386) || defined(__i386__) || defined(_M_IX86) \
+     || defined(__amd64) || defined(__amd64__)  || defined(_M_AMD64) \
+-    || defined(__x86_64) || defined(__x86_64__) || defined(_M_X64)
++    || defined(__x86_64) || defined(__x86_64__) || defined(_M_X64))
+ 
+ // Intel extended double precision format (80 bits)
