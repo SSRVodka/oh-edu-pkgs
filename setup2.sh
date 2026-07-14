@@ -118,6 +118,16 @@ ensure_symlink() {
 	mv -Tf "${tmp_link}" "${link_path}"
 }
 
+write_executable_script_atomic() {
+	local script_path="${1:?script path is required}"
+	local tmp_script="${script_path}.tmp.$$"
+
+	rm -f "${tmp_script}"
+	cat > "${tmp_script}"
+	chmod +x "${tmp_script}"
+	mv -Tf "${tmp_script}" "${script_path}"
+}
+
 ensure_host_tools_unlocked() {
 	if [ ! -x "${HOST_TOOLS_PYTHON}" ]; then
 		info "creating host tools venv: ${HOST_TOOLS_VENV}"
@@ -173,6 +183,10 @@ ensure_host_tools_unlocked() {
 	if ! "${HOST_TOOLS_PYTHON}" -c 'import pipcl' >/dev/null 2>&1; then
 		missing_tools+=(pipcl)
 	fi
+	# python3-pandas need external versioneer outside crossenv to run_command
+	if ! "${HOST_TOOLS_PYTHON}" -c 'import versioneer' >/dev/null 2>&1; then
+		missing_tools+=(versioneer)
+	fi
 
 	if [ "${#missing_tools[@]}" -gt 0 ]; then
 		info "installing missing host build tools into private venv: ${missing_tools[*]}"
@@ -210,7 +224,7 @@ ensure_tool_wrappers_unlocked() {
 
 	local binary_or_cxx_wrapper="${TOOL_WRAPPER_BIN}/ld.binary-input-or-cxx"
 	rm -f "${TOOL_WRAPPER_BIN}/ld.lld-binary-input"
-	cat > "${binary_or_cxx_wrapper}" <<EOF
+	write_executable_script_atomic "${binary_or_cxx_wrapper}" <<EOF
 #!/bin/bash
 set -Eeuo pipefail
 
@@ -256,9 +270,8 @@ fi
 # links through clang++ while keeping the raw ld.lld path above for resources.
 exec "\$real_cxx" --target="\$ohos_target" --sysroot="\$ohos_sysroot" -fuse-ld=lld -L"\$ohos_sysroot_lib" "\$@"
 EOF
-	chmod +x "${binary_or_cxx_wrapper}"
 
-	cat > "${TOOL_WRAPPER_BIN}/gfortran" <<EOF
+	write_executable_script_atomic "${TOOL_WRAPPER_BIN}/gfortran" <<EOF
 #!/bin/bash
 set -Eeuo pipefail
 
@@ -432,7 +445,6 @@ exec "\$ohos_clang" --target="\$ohos_target" --sysroot="\$ohos_sysroot" -fuse-ld
 	-Wl,-rpath,\\\$ORIGIN/../.. -Wl,-rpath,\\\$ORIGIN/../../.. \\
 	-lm -lc
 EOF
-	chmod +x "${TOOL_WRAPPER_BIN}/gfortran"
 }
 
 ensure_tool_wrappers() {
@@ -965,18 +977,16 @@ BUILD_PIP=${BUILD_PYTHON_WRAPPER_ROOT}/pip3
 
 ensure_build_python_wrappers() {
 	mkdir -p "${BUILD_PYTHON_WRAPPER_ROOT}"
-	cat > "${BUILD_PYTHON}" <<EOF
+	write_executable_script_atomic "${BUILD_PYTHON}" <<EOF
 #!/bin/sh
 export LD_LIBRARY_PATH="${BUILD_PYTHON_DIST}/lib:\${LD_LIBRARY_PATH:-}"
 exec "${BUILD_PYTHON_DIST_PYTHON}" "\$@"
 EOF
-	chmod +x "${BUILD_PYTHON}"
-	cat > "${BUILD_PIP}" <<EOF
+	write_executable_script_atomic "${BUILD_PIP}" <<EOF
 #!/bin/sh
 export LD_LIBRARY_PATH="${BUILD_PYTHON_DIST}/lib:\${LD_LIBRARY_PATH:-}"
 exec "${BUILD_PYTHON_DIST_PIP}" "\$@"
 EOF
-	chmod +x "${BUILD_PIP}"
 }
 ensure_build_python_wrappers
 

@@ -10,19 +10,25 @@ set -Eeuo pipefail
 setup() {
 
 # TODO: please fill in the variables for this package
+#
+# Keep setup() metadata-only. Do not resolve dependency paths or expand
+# build-time environment here. For example, do not call get_pkg_dst_dir and do
+# not read HOST_PYTHON_DIST, NUMPY*_LIBROOT, target_root_*, CFLAGS or LDFLAGS
+# while assigning pkg_build_* flags. Compute those dynamic flags in
+# custom_build/post_configure_hook instead.
 
 # [REQUIRED, NON-EMPTY, SEMVER]
-pkg_version="4.11.0"
+pkg_version="1.23.0"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
-pkg_name="python3-opencv"
+pkg_name="python3-huggingface-hub"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-# NOTE: python3>=3.9 use numpy>=2. See https://github.com/opencv/opencv-python/blob/4.x/pyproject.toml
-pkg_deps="python3>=3.9,python3-numpy>=2,openblas,ffmpeg<8"
+pkg_deps="python3>=3.10,python3-click>=8.4.2,python3-filelock>=3.10.0,python3-fsspec>=2023.5.0,python3-hf-xet>=1.5.1,python3-httpx>=0.23.0,python3-packaging>=20.9,python3-pyyaml>=5.1,python3-tqdm>=4.42.1,python3-typing-extensions>=4.1.0"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="python3>=3.9,python3-numpy>=2,openblas,ffmpeg<8,python3-build,python3-setuptools,python3-wheel,python3-packaging"
+# NOTE: you need to add build deps "python3,python3-build,python3-setuptools" if you use setup_pycrossenv in hooks
+pkg_build_deps="python3>=3.10,python3-click>=8.4.2,python3-filelock>=3.10.0,python3-fsspec>=2023.5.0,python3-hf-xet>=1.5.1,python3-httpx>=0.23.0,python3-packaging>=20.9,python3-pyyaml>=5.1,python3-tqdm>=4.42.1,python3-typing-extensions>=4.1.0,python3-build,python3-setuptools"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
-pkg_source_url="https://github.com/opencv/opencv-python.git"
+pkg_source_url="https://files.pythonhosted.org/packages/1a/8f/999e4dda11c6187c78f090eac00895a47e11a0049308f07579bcb7aa3aa2/huggingface_hub-1.23.0.tar.gz"
 # [OPTIONAL, VALID-URL]
 pkg_release_url=""
 ###################################################
@@ -30,10 +36,27 @@ pkg_license="Apache-2.0"
 # [REQUIRED, NON-EMPTY, seperated by commas, NO-SPACE]. e.g., x86_64,aarch64,arm,riscv
 pkg_support_archs="x86_64,aarch64,arm"
 # [REQUIED, NON-EMPTY]
-# choose one: "autotools" (configure and make), "cmake", "meson", "custom" ("custom" will skip the default build process)
-pkg_build_type="custom"
+# choose one: "autotools" (configure and make), "cmake", "meson", "pure-python", "pyo3-rust", "custom"
+# NOTE:
+#  - "pure-python" is ONLY valid for those packages without ANY native package dependency.
+#  - "pyo3-rust" is for maturin/PyO3 Rust extension packages; rustup/cargo/rustc and Rust targets must be prepared before build.
+#  - "custom" will skip the default build process
+#  - add "python3,python3-build,python3-wheel,python3-setuptools" to pkg_build_deps if you use "pure-python"
+#  - add "python3" to pkg_build_deps if you use "pyo3-rust"
+#  - add "python3" to pkg_build_deps if you use "meson"
+#  - you are responsible to set setup_pycrossenv if you set pkg_build_type == "meson", ensure meson, and use destroy_pycrossenv before finishing building this package.
+#  - do not run "rustup target add" or "pip install maturin" in BUILD hooks; maturin is managed by .ohloha/host-venv.
+#  - for PEP 517 Python packages, prefer build isolation and use --no-deps if
+#    you only need to avoid runtime dependencies. --no-build-isolation means
+#    build backends like hatchling must be installed in the crossenv build side
+#    via ${PYCROSS_BUILD_PIP}; installing them in ${HOST_TOOLS_PYTHON} is not enough.
+pkg_build_type="pure-python"
 # [OPTIONAL]
-pkg_build_parallism="20"
+pkg_build_parallism=""
+# [OPTIONAL: empty or Y]
+pkg_force_clean_build=""
+# [OPTIONAL, separated by commas, NO-SPACE]. Relative paths are resolved from this package directory, then repo root.
+pkg_patch_files=""
 
 ####### build type related (all OPTIONAL) #######
 
@@ -52,7 +75,7 @@ pkg_build_cmake_extra_cppflags=""
 pkg_build_cmake_extra_ldflags=""
 pkg_build_cmake_extra_cmake_findroot_path=""
 
-# fill in a relative path to this script
+# fill in a absolute path
 pkg_build_meson_cross_file=""
 pkg_build_meson_extra_meson_flags=""
 pkg_build_meson_extra_cflags=""
@@ -72,17 +95,22 @@ pkg_build_meson_extra_cmake_findroot_path=""
 #  5. important cross-compiling variables will be reset after building each package (like CFLAGS, CXXFLAGS, LDFLAGS, CC, CXX, AR, PKG_CONFIG_LIBDIR, ...)
 #  6. you can use helper functions in setup.sh
 #  7. you can define your own function here but you can only use it for this package. If you want to define a function for building process of multiple packages, you should modify the setup.sh
+#  8. you are responsible to handle all the failures in hooks (commands may continue if you not deal with it)
 # 
 # Available global variables:
 #  - ${native_project_root}: the parent directory of setup.sh
 #  - ${native_sources_root}: root for native sources (staging area)
 #  - cross-compiling variables (reset for each package): CC, CXX, AR, CFLAGS, PKG_CONFIG_*, ...
 #  - global configurations: OHOS_ARCH, OHOS_CPU, OHOS_LIBDIR, PATCH_FILE_ROOT, MESON_CROSS_ROOT, HOST_SYSROOT, ... (see setup.sh)
+#  - Python crossenv paths: PY_CROSS_ROOT, HOST_SITE_PKGS, PYCROSS_CROSS_PYTHON,
+#    PYCROSS_CROSS_PIP, PYCROSS_BUILD_PIP, PYPKG_OUTPUT_WHEEL_DIR; do not hardcode crossenv_<cpu>
+#  - Python package helpers archive wheels to ${PYPKG_OUTPUT_WHEEL_DIR}; keep it as generated output.
 # Available local variables (except for native_env_hook):
 #  - ${current_source_url}: user configured `pkg_source_url` above (in `setup()`)
 #  - ${current}: the location (directory) of this script
 #  - ${sources_root}: the suggested root directory of the source directory
 #  - ${current_source_root}: the current source directory to be compiled
+#  - ${current_build_root}: the generated build directory after configure/setup and before compiling
 #  - ${target_root_with_pkgname}: output directory generated by the building process. i.e. the staging area for this package manager
 #  - ${target_root_prefix_without_pkgname}: Now ${target_root_prefix_without_pkgname}.<pkgname> == ${target_root_with_pkgname}
 #########################################
@@ -90,7 +118,7 @@ pkg_build_meson_extra_cmake_findroot_path=""
 # Hook: called before setup.sh is sourced
 # NOTE:
 #  - failure in this function will terminate this script immediately
-#  - you can NOT use local variables defined above. you can only use ${native_project_root}, ${native_sources_root} built by builder.sh
+#  - you can NOT use local variables defined above. you can only use ${native_project_root}, ${native_sources_root}, ${native_dst_root} built by builder.sh
 native_env_hook() {
 	:
 }
@@ -100,16 +128,7 @@ native_env_hook() {
 # NOTE: you need to make sure the source locates in ${current_source_root}
 # 	if you set _custom_download_source_continue="false" caz default build process will use
 custom_download_source() {
-	local opencv_python_release_tag="86"
-
-	rm -rf "${current_source_root}"
-	git clone -b "$opencv_python_release_tag" "$pkg_source_url" "${current_source_root}" || return 1
-	pushd "${current_source_root}" || return 1
-	git submodule sync || { popd; return 1; }
-	git submodule update --init --recursive || { popd; return 1; }
-	popd || return 1
-
-	_custom_download_source_continue=false
+	_custom_download_source_continue=true
 }
 
 ############### DO NOT MODIFY THIS PART #################
@@ -135,104 +154,23 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
-	local build_rc=0
-	local saved_cmake_args="${CMAKE_ARGS:-}"
-	local saved_cflags="${CFLAGS:-}"
-	local saved_cxxflags="${CXXFLAGS:-}"
-	local saved_cppflags="${CPPFLAGS:-}"
-	local saved_ldflags="${LDFLAGS:-}"
-	local saved_pkg_config_libdir="${PKG_CONFIG_LIBDIR:-}"
-	local saved_enable_contrib="${ENABLE_CONTRIB:-}"
-	local saved_enable_headless="${ENABLE_HEADLESS:-}"
-
-	setup_pycrossenv || return 1
-	"${PYCROSS_BUILD_PIP}" install "scikit-build>=0.14.0" packaging || build_rc=$?
-
-	if [ "$build_rc" -eq 0 ]; then
-		prepare_opencv_python_build_env || build_rc=$?
-	fi
-	if [ "$build_rc" -eq 0 ]; then
-		build_python_cross_package_active -v --no-deps --no-build-isolation --no-binary :all: . || build_rc=$?
-	fi
-
-	CMAKE_ARGS="$saved_cmake_args"
-	CFLAGS="$saved_cflags"
-	CXXFLAGS="$saved_cxxflags"
-	CPPFLAGS="$saved_cppflags"
-	LDFLAGS="$saved_ldflags"
-	PKG_CONFIG_LIBDIR="$saved_pkg_config_libdir"
-	export ENABLE_CONTRIB="$saved_enable_contrib"
-	export ENABLE_HEADLESS="$saved_enable_headless"
-
-	destroy_pycrossenv || {
-		[ "$build_rc" -eq 0 ] && build_rc=1
-	}
-
+	build_python_cross_package -v --no-deps . || return 1
 	_custom_build_continue=false
-	return "$build_rc"
+}
+
+# Hook: called after configure/generate/setup stage and before compiling.
+#  - autotools: after configure and before make
+#  - cmake: after cmake configure and before cmake --build
+#  - meson: after meson setup and before ninja
+#  - not called for pkg_build_type="custom"
+#  - not called by the default build path when custom_build sets _custom_build_continue=false
+post_configure_hook() {
+	:
 }
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	install_current_python_wheelhouse_to_target_site_packages || return 1
-	patch_opencv_python_extension_rpaths
+	install_current_python_wheelhouse_to_target_site_packages
 }
 
 ################ self-defined functions (local) goes below ################
-
-patch_opencv_python_extension_rpaths() {
-	local extension
-	local python_lib="libpython${PY_VERSION}.so"
-	local -a extensions=()
-
-	mapfile -t extensions < <(find "${target_root_with_pkgname}/lib" -path "*/site-packages/cv2/*.so" -type f | sort)
-	for extension in "${extensions[@]}"; do
-		if file "$extension" | grep -q "ELF.*shared object"; then
-			if ! patchelf --print-needed "$extension" | grep -Fxq "$python_lib"; then
-				patchelf --add-needed "$python_lib" "$extension" || return 1
-			fi
-			patchelf --set-rpath '$ORIGIN:$ORIGIN/../../..' "$extension" || return 1
-		fi
-	done
-}
-
-prepare_opencv_python_build_env() {
-	local deps
-	local dep
-	local dep_prefix
-	local extra_cflags=""
-	local extra_ldflags=""
-	local extra_cmake_prefix=""
-	local extra_cmake_findroot=""
-	local extra_pkg_config_libdir=""
-
-	deps=$(get_pkg_names_from_deps "$pkg_build_deps")
-	for dep in $deps; do
-		case "$dep" in
-			python3-build|python3-setuptools|python3-wheel|python3-packaging)
-				continue
-				;;
-		esac
-		dep_prefix=$(get_pkg_dst_dir "$dep") || return 1
-		extra_cflags="-I${dep_prefix}/include ${extra_cflags}"
-		extra_ldflags="-L${dep_prefix}/${OHOS_LIBDIR} ${extra_ldflags}"
-		extra_cmake_findroot="${dep_prefix};${extra_cmake_findroot}"
-		extra_pkg_config_libdir="${dep_prefix}/${OHOS_LIBDIR}/pkgconfig:${extra_pkg_config_libdir}"
-		if [ -d "${dep_prefix}/${OHOS_LIBDIR}/cmake" ]; then
-			local item
-			for item in "${dep_prefix}/${OHOS_LIBDIR}/cmake"/*; do
-				[ -e "$item" ] || continue
-				extra_cmake_prefix="${item};${extra_cmake_prefix}"
-			done
-		fi
-	done
-
-	export CFLAGS="${extra_cflags} ${CFLAGS:-}"
-	export CXXFLAGS="${CFLAGS:-}"
-	export CPPFLAGS="${CFLAGS:-}"
-	export LDFLAGS="${extra_ldflags} ${LDFLAGS:-}"
-	export PKG_CONFIG_LIBDIR="${extra_pkg_config_libdir}${PKG_CONFIG_LIBDIR:-}"
-	export ENABLE_CONTRIB=0
-	export ENABLE_HEADLESS=0
-	export CMAKE_ARGS="${CMAKE_ARGS:-} -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_CONFIG} -DOHOS_ARCH=${OHOS_ARCH} -DSSRVODKA_APPEND_CMAKE_PREFIX_PATH=${extra_cmake_prefix} -DSSRVODKA_APPEND_C_PREPROCESSOR_FLAGS='-D__MUSL__ -D__OPENHARMONY__ -D__OHOS__' -DSSRVODKA_APPEND_CMAKE_FIND_ROOT_PATH=${extra_cmake_findroot} -DCMAKE_FIND_ROOT_PATH=${HOST_PYTHON_DIST};${extra_cmake_findroot} -DCMAKE_INSTALL_LIBDIR=${OHOS_LIBDIR} -DPYTHON_INCLUDE_DIRS=${HOST_PYTHON_DIST}/include -DPYTHON3_INCLUDE_DIR=${HOST_PYTHON_DIST}/include/python${PY_VERSION} -DPYTHON3_INCLUDE_PATH=${HOST_PYTHON_DIST}/include/python${PY_VERSION} -DPYTHON3_LIBRARY=${HOST_PYTHON_DIST}/${OHOS_LIBDIR}/libpython${PY_VERSION}.so -DPYTHON3_LIBRARIES=${HOST_PYTHON_DIST}/${OHOS_LIBDIR}/libpython${PY_VERSION}.so -DPYTHON3_NUMPY_INCLUDE_DIRS=${NUMPY2_LIBROOT}/include -DBUILD_opencv_python3=ON -DBUILD_opencv_python2=OFF -DBUILD_opencv_java=OFF -DOPENCV_PYTHON3_INSTALL_PATH=python -DINSTALL_CREATE_DISTRIB=ON -DBUILD_opencv_apps=OFF -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_DOCS=OFF -DWITH_QT=OFF -DWITH_GTK=OFF -DOPENCV_FFMPEG_ENABLE_LIBAVDEVICE=OFF"
-}

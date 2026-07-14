@@ -211,6 +211,7 @@ prebuilt_patch_hook() {
 # NOTE: it will be executed BEFORE prebuilt_patch_hook
 prebuilt_patch_once_hook() {
 	apply_pkg_git_patches
+	patch_grpc_python_cares_config_for_ohos
 }
 
 # Hook: customize building process.
@@ -253,8 +254,10 @@ build_grpc_python_wheels() {
 	if [ "$build_rc" -eq 0 ]; then
 		export GRPC_PYTHON_BUILD_SYSTEM_OPENSSL=1
 		export GRPC_PYTHON_BUILD_WITH_CYTHON=1
-		export GRPC_PYTHON_CFLAGS="-std=c++17 -fno-wrapv -frtti -O1 -I${openssl_prefix}/include ${CFLAGS:-}"
-		export GRPC_PYTHON_LDFLAGS="-L${openssl_prefix}/${OHOS_LIBDIR} ${LDFLAGS:-}"
+		CFLAGS="-I${openssl_prefix}/include ${CFLAGS:-}"
+		CXXFLAGS="-I${openssl_prefix}/include ${CXXFLAGS:-}"
+		export GRPC_PYTHON_CFLAGS="-std=c++17 -fno-wrapv -frtti -O1 -DEVP_MD_CTX_create=EVP_MD_CTX_new -DEVP_MD_CTX_destroy=EVP_MD_CTX_free -I${openssl_prefix}/include ${CFLAGS:-}"
+		export GRPC_PYTHON_LDFLAGS="-L${openssl_prefix}/${OHOS_LIBDIR} ${LDFLAGS:-} -lssl -lcrypto"
 
 		pushd "${current_source_root}" >/dev/null || build_rc=$?
 		if [ "$build_rc" -eq 0 ]; then
@@ -304,6 +307,13 @@ build_grpc_python_wheels() {
 	}
 
 	return "$build_rc"
+}
+
+patch_grpc_python_cares_config_for_ohos() {
+	local ares_config="${current_source_root}/third_party/cares/config_linux/ares_config.h"
+
+	[ -f "$ares_config" ] || { error "missing c-ares Linux config: ${ares_config}"; return 1; }
+	sed -i 's|^#define HAVE_GETSERVBYPORT_R$|/* #undef HAVE_GETSERVBYPORT_R */|' "$ares_config"
 }
 
 prepare_grpcio_tools_sources_without_bazel() {

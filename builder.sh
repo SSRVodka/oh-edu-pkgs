@@ -2094,6 +2094,16 @@ cleanup_failed_work_root() {
     esac
 }
 
+cleanup_completed_work_root() {
+    case "${current_work_root:-}" in
+        "${ohloha_root}"/work/sha256-*)
+            if ! rm -rf "$current_work_root"; then
+                warn "failed to remove completed workdir: ${current_work_root}"
+            fi
+            ;;
+    esac
+}
+
 fail_build_package() {
     local message="${1:-}"
 
@@ -2197,6 +2207,7 @@ build_package_locked() {
         return 1
     }
 
+    cleanup_completed_work_root
     restore_xcompile_flags
     clear_vars
     info "Build $build_file completed"

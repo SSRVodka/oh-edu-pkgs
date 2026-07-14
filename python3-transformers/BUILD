@@ -5,7 +5,7 @@ setup() {
 
 pkg_version="5.12.1"
 pkg_name="python3-transformers"
-pkg_deps="python3>3.7,python3-regex,python3-tokenizers"
+pkg_deps="python3>3.7,python3-huggingface-hub,python3-regex,python3-tokenizers,python3-safetensors"
 pkg_build_deps="python3>3.7,python3-build,python3-wheel,python3-setuptools"
 pkg_source_url="https://files.pythonhosted.org/packages/source/t/transformers/transformers-5.12.1.tar.gz"
 pkg_release_url=""

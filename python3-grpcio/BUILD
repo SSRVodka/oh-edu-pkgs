@@ -71,6 +71,7 @@ post_configure_hook() {
 
 postbuilt_hook() {
 	install_grpc_wheel_to_target_site_packages "grpcio-*.whl"
+	patch_grpc_python_extension_rpaths
 }
 
 ################ self-defined functions (local) goes below ################
@@ -95,4 +96,16 @@ install_grpc_wheel_to_target_site_packages() {
 	mkdir -p "$package_wheel_dir" || return 1
 	cp -f "${wheels[0]}" "$package_wheel_dir/" || return 1
 	install_python_wheelhouse_to_target_site_packages "$package_wheel_dir"
+}
+
+patch_grpc_python_extension_rpaths() {
+	local extension
+	local -a extensions=()
+
+	mapfile -t extensions < <(find "${target_root_with_pkgname}/${OHOS_LIBDIR}" -path "*/site-packages/grpc/_cython/*.so" -type f | sort)
+	for extension in "${extensions[@]}"; do
+		if file "$extension" | grep -q "ELF.*shared object"; then
+			patchelf --set-rpath '$ORIGIN:$ORIGIN/../../../..' "$extension" || return 1
+		fi
+	done
 }
