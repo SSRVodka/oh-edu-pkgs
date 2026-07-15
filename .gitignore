@@ -25,6 +25,8 @@ PKG_INDEX.json
 .DS_Store
 *.dist
 *.env
+!sysdeps.env
+*.session
 *.log
 *.old
 .vscode
