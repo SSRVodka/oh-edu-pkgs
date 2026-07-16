@@ -1,0 +1,36 @@
+--- run-command.c
++++ run-command.c
+@@ -498,8 +498,10 @@
+ 
+ struct atfork_state {
+ #ifndef NO_PTHREADS
++#ifndef __OPENHARMONY__
+ 	int cs;
+ #endif
++#endif
+ 	sigset_t old;
+ };
+ 
+@@ -528,9 +530,11 @@
+ #else
+ 	CHECK_BUG(pthread_sigmask(SIG_SETMASK, &all, &as->old),
+ 		"blocking all signals");
++#ifndef __OPENHARMONY__
+ 	CHECK_BUG(pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &as->cs),
+ 		"disabling cancellation");
+ #endif
++#endif
+ }
+ 
+ static void atfork_parent(struct atfork_state *as)
+@@ -539,8 +543,10 @@
+ 	if (sigprocmask(SIG_SETMASK, &as->old, NULL))
+ 		die_errno("sigprocmask");
+ #else
++#ifndef __OPENHARMONY__
+ 	CHECK_BUG(pthread_setcancelstate(as->cs, NULL),
+ 		"re-enabling cancellation");
++#endif
+ 	CHECK_BUG(pthread_sigmask(SIG_SETMASK, &as->old, NULL),
+ 		"restoring signal mask");
+ #endif
