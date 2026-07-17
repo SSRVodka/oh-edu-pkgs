@@ -1744,7 +1744,7 @@ setup_pycrossenv() {
     # by a package itself must be declared in that package and added by its hook.
     CFLAGS="-I${HOST_PYTHON_DIST}/include -I${NUMPY_LIBROOT}/include -I${NUMPY2_LIBROOT}/include $CFLAGS"
     CXXFLAGS="$CFLAGS"
-    LDFLAGS="-lpython${PY_VERSION} -L${NUMPY_LIBROOT}/lib -L${NUMPY2_LIBROOT}/lib $LDFLAGS"
+    LDFLAGS="-L${HOST_PYTHON_DIST}/${OHOS_LIBDIR} -lpython${PY_VERSION} -L${NUMPY_LIBROOT}/lib -L${NUMPY2_LIBROOT}/lib $LDFLAGS"
     PKG_CONFIG_LIBDIR="${HOST_PYTHON_DIST}/${OHOS_LIBDIR}/pkgconfig:${NUMPY_LIBROOT}/lib/pkgconfig:${NUMPY2_LIBROOT}/lib/pkgconfig"
     # export PKG_CONFIG_SYSROOT_DIR=${OHOS_SDK}/native/sysroot
     # export PKG_CONFIG_PATH=${HOST_PYTHON_DIST}/${OHOS_LIBDIR}/pkgconfig:${NUMPY_LIBROOT}/lib/pkgconfig

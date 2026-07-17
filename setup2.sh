@@ -160,7 +160,7 @@ ensure_host_tools_unlocked() {
 	fi
 	# needed by native Python packages using modern PEP 517 backends.
 	if ! "${HOST_TOOLS_PYTHON}" -c 'import setuptools_scm' >/dev/null 2>&1; then
-		missing_tools+=(setuptools-scm)
+		missing_tools+=(setuptools-scm[toml])
 	fi
 	if ! "${HOST_TOOLS_PYTHON}" -c 'import cppy' >/dev/null 2>&1; then
 		missing_tools+=(cppy)
@@ -1017,8 +1017,10 @@ PYCROSS_BUILD_PIP=${PY_CROSS_ROOT}/build/bin/pip
 PYPKG_OUTPUT_WHEEL_DIR=${CUR_DIR}/dist.wheels
 
 # numpy >= 2 use different header location
-NUMPY_LIBROOT=${HOST_SITE_PKGS}/numpy/core
-NUMPY2_LIBROOT=${HOST_SITE_PKGS}/numpy/_core
+NUMPY_RELDIR=numpy/core
+NUMPY2_RELDIR=numpy/_core
+NUMPY_LIBROOT=${HOST_SITE_PKGS}/${NUMPY_RELDIR}
+NUMPY2_LIBROOT=${HOST_SITE_PKGS}/${NUMPY2_RELDIR}
 
 # modify ARCH in meson config
 update_config() {

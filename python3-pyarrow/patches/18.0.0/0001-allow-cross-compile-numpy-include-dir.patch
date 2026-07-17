@@ -1,0 +1,19 @@
+diff --git a/python/setup.py b/python/setup.py
+index 9b14829..6ef68fa 100755
+--- a/python/setup.py
++++ b/python/setup.py
+@@ -105,8 +105,12 @@ class build_ext(_build_ext):
+     _found_names = ()
+ 
+     def build_extensions(self):
+-        import numpy
+-        numpy_incl = numpy.get_include()
++        numpy_incl = os.environ.get('PYARROW_NUMPY_INCLUDE_DIR')
++        if not numpy_incl:
++            import numpy
++            numpy_incl = numpy.get_include()
++        if not os.path.isdir(numpy_incl):
++            raise RuntimeError(f'NumPy include directory not found: {numpy_incl}')
+ 
+         self.extensions = [ext for ext in self.extensions
+                            if ext.name != '__dummy__']
