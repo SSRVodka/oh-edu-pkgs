@@ -173,7 +173,7 @@ post_configure_hook() {
 	local _curl_prefix
 
 	_curl_prefix=$(get_pkg_dst_dir curl) || return 1
-	printf '\n# ohloha cross build overrides\nNO_RUST=1\nNO_PERL=YesPlease\nPERL_PATH=\nCURL_CONFIG=%s/bin/curl-config\nCURL_CFLAGS=\nCURL_LDFLAGS=-lcurl\n' "${_curl_prefix}" >> "${current_build_root}/config.mak.autogen"
+	printf '\n# ohloha cross build overrides\nRUNTIME_PREFIX=YesPlease\ngitexecdir=libexec/git-core\ntemplate_dir=share/git-core/templates\nETC_GITATTRIBUTES=/etc/gitattributes\nNO_RUST=1\nNO_PERL=YesPlease\nPERL_PATH=\nCURL_CONFIG=%s/bin/curl-config\nCURL_CFLAGS=\nCURL_LDFLAGS=-lcurl\n' "${_curl_prefix}" >> "${current_build_root}/config.mak.autogen"
 	export NO_RUST=1
 }
 
