@@ -10,18 +10,25 @@ set -Eeuo pipefail
 setup() {
 
 # TODO: please fill in the variables for this package
+#
+# Keep setup() metadata-only. Do not resolve dependency paths or expand
+# build-time environment here. For example, do not call get_pkg_dst_dir and do
+# not read HOST_PYTHON_DIST, NUMPY*_LIBROOT, target_root_*, CFLAGS or LDFLAGS
+# while assigning pkg_build_* flags. Compute those dynamic flags in
+# custom_build/post_configure_hook instead.
 
 # [REQUIRED, NON-EMPTY, SEMVER]
-pkg_version="2.3.1"
+pkg_version="3.10.0"
 # [REQUIRED, NON-EMPTY, NO-SPACE]
-pkg_name="python3-numpy"
+pkg_name="python3-mujoco"
 # [OPTIONAL, seperated by commas, NO-SPACE]. e.g., pkgname1>=0.5,pkgname2==1.0.0,pkgname2<2.0.0,pkgname3
-pkg_deps="openblas,python3>=3.9"
+pkg_deps="mujoco==3.10.0,glfw,python3>=3.10,python3-abseil-py,python3-etils-epath,python3-glfw,python3-numpy,python3-pyopengl"
 # [OPTIONAL, seperated by commas, NO-SPACE]
-pkg_build_deps="openblas,python3>=3.9,python3-build"
+# NOTE: you need to add build deps "python3,python3-build,python3-setuptools" if you use setup_pycrossenv in hooks
+pkg_build_deps="mujoco==3.10.0,glfw,mesa,python3>=3.10,python3-abseil-py,python3-etils-epath,python3-glfw,python3-numpy,python3-pyopengl"
 ########### At Least ONE is REQUIRED ##############
 # [OPTIONAL, VALID-URL]
-pkg_source_url="https://github.com/numpy/numpy.git"
+pkg_source_url="https://files.pythonhosted.org/packages/a2/3b/c76837b7fdb007f7605ff783689a0bd23a5a49b065928bec2f1fa7ea3d67/mujoco-3.10.0.tar.gz"
 # [OPTIONAL, VALID-URL]
 pkg_release_url=""
 ###################################################
@@ -29,10 +36,27 @@ pkg_license="Apache-2.0"
 # [REQUIRED, NON-EMPTY, seperated by commas, NO-SPACE]. e.g., x86_64,aarch64,arm,riscv
 pkg_support_archs="x86_64,aarch64,arm"
 # [REQUIED, NON-EMPTY]
-# choose one: "autotools" (configure and make), "cmake", "meson"
+# choose one: "autotools" (configure and make), "cmake", "meson", "pure-python", "pyo3-rust", "custom"
+# NOTE:
+#  - "pure-python" is ONLY valid for those packages without ANY native package dependency.
+#  - "pyo3-rust" is for maturin/PyO3 Rust extension packages; rustup/cargo/rustc and Rust targets must be prepared before build.
+#  - "custom" will skip the default build process
+#  - add "python3,python3-build,python3-wheel,python3-setuptools" to pkg_build_deps if you use "pure-python"
+#  - add "python3" to pkg_build_deps if you use "pyo3-rust"
+#  - add "python3" to pkg_build_deps if you use "meson"
+#  - you are responsible to set setup_pycrossenv if you set pkg_build_type == "meson", ensure meson, and use destroy_pycrossenv before finishing building this package.
+#  - do not run "rustup target add" or "pip install maturin" in BUILD hooks; maturin is managed by .ohloha/host-venv.
+#  - for PEP 517 Python packages, prefer build isolation and use --no-deps if
+#    you only need to avoid runtime dependencies. --no-build-isolation means
+#    build backends like hatchling must be installed in the crossenv build side
+#    via ${PYCROSS_BUILD_PIP}; installing them in ${HOST_TOOLS_PYTHON} is not enough.
 pkg_build_type="custom"
 # [OPTIONAL]
 pkg_build_parallism=""
+# [OPTIONAL: empty or Y]
+pkg_force_clean_build=""
+# [OPTIONAL, separated by commas, NO-SPACE]. Relative paths are resolved from this package directory, then repo root.
+pkg_patch_files=""
 
 ####### build type related (all OPTIONAL) #######
 
@@ -51,7 +75,7 @@ pkg_build_cmake_extra_cppflags=""
 pkg_build_cmake_extra_ldflags=""
 pkg_build_cmake_extra_cmake_findroot_path=""
 
-# fill in a relative path to this script
+# fill in a absolute path
 pkg_build_meson_cross_file=""
 pkg_build_meson_extra_meson_flags=""
 pkg_build_meson_extra_cflags=""
@@ -71,17 +95,22 @@ pkg_build_meson_extra_cmake_findroot_path=""
 #  5. important cross-compiling variables will be reset after building each package (like CFLAGS, CXXFLAGS, LDFLAGS, CC, CXX, AR, PKG_CONFIG_LIBDIR, ...)
 #  6. you can use helper functions in setup.sh
 #  7. you can define your own function here but you can only use it for this package. If you want to define a function for building process of multiple packages, you should modify the setup.sh
+#  8. you are responsible to handle all the failures in hooks (commands may continue if you not deal with it)
 # 
 # Available global variables:
 #  - ${native_project_root}: the parent directory of setup.sh
 #  - ${native_sources_root}: root for native sources (staging area)
 #  - cross-compiling variables (reset for each package): CC, CXX, AR, CFLAGS, PKG_CONFIG_*, ...
-#  - global configurations: OHOS_ARCH, OHOS_CPU, OHOS_LIBDIR, HOST_SYSROOT, ... (see setup.sh)
+#  - global configurations: OHOS_ARCH, OHOS_CPU, OHOS_LIBDIR, PATCH_FILE_ROOT, MESON_CROSS_ROOT, HOST_SYSROOT, ... (see setup.sh)
+#  - Python crossenv paths: PY_CROSS_ROOT, HOST_SITE_PKGS, PYCROSS_CROSS_PYTHON,
+#    PYCROSS_CROSS_PIP, PYCROSS_BUILD_PIP, PYPKG_OUTPUT_WHEEL_DIR; do not hardcode crossenv_<cpu>
+#  - Python package helpers archive wheels to ${PYPKG_OUTPUT_WHEEL_DIR}; keep it as generated output.
 # Available local variables (except for native_env_hook):
 #  - ${current_source_url}: user configured `pkg_source_url` above (in `setup()`)
 #  - ${current}: the location (directory) of this script
 #  - ${sources_root}: the suggested root directory of the source directory
 #  - ${current_source_root}: the current source directory to be compiled
+#  - ${current_build_root}: the generated build directory after configure/setup and before compiling
 #  - ${target_root_with_pkgname}: output directory generated by the building process. i.e. the staging area for this package manager
 #  - ${target_root_prefix_without_pkgname}: Now ${target_root_prefix_without_pkgname}.<pkgname> == ${target_root_with_pkgname}
 #########################################
@@ -89,7 +118,7 @@ pkg_build_meson_extra_cmake_findroot_path=""
 # Hook: called before setup.sh is sourced
 # NOTE:
 #  - failure in this function will terminate this script immediately
-#  - you can NOT use local variables defined above. you can only use ${native_project_root}, ${native_sources_root} built by builder.sh
+#  - you can NOT use local variables defined above. you can only use ${native_project_root}, ${native_sources_root}, ${native_dst_root} built by builder.sh
 native_env_hook() {
 	:
 }
@@ -99,16 +128,7 @@ native_env_hook() {
 # NOTE: you need to make sure the source locates in ${current_source_root}
 # 	if you set _custom_download_source_continue="false" caz default build process will use
 custom_download_source() {
-	
-	rm -rf "${current_source_root}"
-	git clone "$pkg_source_url" "${current_source_root}" || return 1
-	pushd "${current_source_root}" || return 1
-	git checkout "v$pkg_version" || { popd; return 1; }
-	git submodule update --init --recursive || { popd; return 1; }
-	popd || return 1
-
-	# use our own download process
-	_custom_download_source_continue=false
+	_custom_download_source_continue=true
 }
 
 ############### DO NOT MODIFY THIS PART #################
@@ -134,59 +154,55 @@ prebuilt_patch_once_hook() {
 #  - You can set cross-compiling related global variables here (like CFLAGS)
 #  - postbuilt_hook will still be called after custom_build set _custom_build_continue="false"
 custom_build() {
-	
+	local build_rc=0
+	local glfw_prefix=""
+	local mesa_prefix=""
+	local mujoco_prefix=""
+	local python_prefix=""
 	setup_pycrossenv || return 1
 
-	"${PYCROSS_BUILD_PIP}" install --upgrade "meson-python>=0.15.0" "Cython>=3.0.6" || { destroy_pycrossenv || true; return 1; }
-
-	local np_deps
-	np_deps=$(get_pkg_names_from_deps "$pkg_deps")
-	local np_dep
-	for np_dep in $np_deps; do
-		CFLAGS="-I$(get_pkg_dst_dir $np_dep)/include ${CFLAGS}"
-		LDFLAGS="-L$(get_pkg_dst_dir $np_dep)/${OHOS_LIBDIR} ${LDFLAGS}"
-		PKG_CONFIG_LIBDIR="$(get_pkg_dst_dir $np_dep)/${OHOS_LIBDIR}/pkgconfig:${PKG_CONFIG_LIBDIR}"
-	done
-
-	local meson_cross=${MESON_CROSS_ROOT}/ohos-build.meson
-	local cython_for_build="${PY_CROSS_ROOT}/build/bin/cython"
-	local meson_native="${current_work_root}/meson/numpy-native.meson"
-
-	set_meson_list $meson_cross "common_c_flags" "$CFLAGS"
-	set_meson_list $meson_cross "common_ld_flags" "$LDFLAGS"
-	if [ ! -x "$cython_for_build" ]; then
-		error "missing build-side Cython executable: $cython_for_build"
-		destroy_pycrossenv || true
-		return 1
+	if [ "$build_rc" -eq 0 ]; then
+		mujoco_prefix=$(get_pkg_dst_dir mujoco) || build_rc=$?
 	fi
-	mkdir -p "${current_work_root}/meson" || { destroy_pycrossenv || true; return 1; }
-	printf "[binaries]\ncython = '%s'\ncython3 = '%s'\n" "$cython_for_build" "$cython_for_build" > "$meson_native" || { destroy_pycrossenv || true; return 1; }
-
-	pushd "${current_source_root}" || { destroy_pycrossenv || true; return 1; }
-	rm -rf ./dist || { popd; destroy_pycrossenv || true; return 1; }
-	CYTHON_FOR_BUILD="$cython_for_build" python -m build --wheel --no-isolation -Csetup-args="--cross-file=${meson_cross}" -Csetup-args="--native-file=${meson_native}" || { popd; destroy_pycrossenv || true; return 1; }
-	pip install -v ./dist/*-cp${PY_VERSION_CODE}-cp${PY_VERSION_CODE}-linux_${OHOS_CPU}.whl || { popd; destroy_pycrossenv || true; return 1; }
-	
-	# copy wheel to destination for wheel distribution
-	cp ./dist/* "${PYPKG_OUTPUT_WHEEL_DIR}" || { popd; destroy_pycrossenv || true; return 1; }
-
-	popd || { destroy_pycrossenv || true; return 1; }
-
-	destroy_pycrossenv || return 1
-	
+	if [ "$build_rc" -eq 0 ]; then
+		glfw_prefix=$(get_pkg_dst_dir glfw) || build_rc=$?
+	fi
+	if [ "$build_rc" -eq 0 ]; then
+		mesa_prefix=$(get_pkg_dst_dir mesa) || build_rc=$?
+	fi
+	if [ "$build_rc" -eq 0 ]; then
+		python_prefix=$(get_pkg_dst_dir python3) || build_rc=$?
+	fi
+	if [ "$build_rc" -eq 0 ]; then
+		MUJOCO_PATH="${mujoco_prefix}" \
+		MUJOCO_PLUGIN_PATH="${mujoco_prefix}/${OHOS_LIBDIR}/mujoco/plugin" \
+		MUJOCO_CMAKE_ARGS="${MUJOCO_CMAKE_ARGS:-} -DMUJOCO_SIMULATE_USE_SYSTEM_GLFW=ON -DCMAKE_PREFIX_PATH=${glfw_prefix}" \
+		CFLAGS="-I${mujoco_prefix}/include -I${glfw_prefix}/include -I${mesa_prefix}/include ${CFLAGS:-}" \
+		CXXFLAGS="-I${mujoco_prefix}/include -I${glfw_prefix}/include -I${mesa_prefix}/include ${CXXFLAGS:-}" \
+		CPPFLAGS="-I${mujoco_prefix}/include -I${glfw_prefix}/include -I${mesa_prefix}/include ${CPPFLAGS:-}" \
+		LDFLAGS="-L${python_prefix}/${OHOS_LIBDIR} -L${mujoco_prefix}/${OHOS_LIBDIR} -L${glfw_prefix}/${OHOS_LIBDIR} -L${mesa_prefix}/${OHOS_LIBDIR} ${LDFLAGS:-}" \
+			build_python_cross_package_active -v --no-deps --no-binary :all: . || build_rc=$?
+	fi
+	destroy_pycrossenv || {
+		[ "$build_rc" -eq 0 ] && build_rc=1
+	}
 	_custom_build_continue=false
+	return "$build_rc"
+}
+
+# Hook: called after configure/generate/setup stage and before compiling.
+#  - autotools: after configure and before make
+#  - cmake: after cmake configure and before cmake --build
+#  - meson: after meson setup and before ninja
+#  - not called for pkg_build_type="custom"
+#  - not called by the default build path when custom_build sets _custom_build_continue=false
+post_configure_hook() {
+	:
 }
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	local out=${target_root_with_pkgname}/${OHOS_LIBDIR}/python${PY_VERSION}/site-packages
-	local out_bin=${target_root_with_pkgname}/bin
-	mkdir -p "${out}" "${out_bin}" || return 1
-	# copy libs
-	cp -r ${HOST_SITE_PKGS}/numpy* "${out}/" || return 1
-	# copy binary script
-	cp "${PY_CROSS_ROOT}/cross/bin/f2py" "${out_bin}" || return 1
-	sed -i "s|${PY_CROSS_ROOT}/cross/bin/||" "${out_bin}/f2py" || return 1
+	install_current_python_wheelhouse_to_target_site_packages
 }
 
 ################ self-defined functions (local) goes below ################

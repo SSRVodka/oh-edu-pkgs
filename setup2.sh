@@ -147,11 +147,11 @@ ensure_host_tools_unlocked() {
 	if [ ! -x "${HOST_MATURIN}" ]; then
 		missing_tools+=(maturin)
 	fi
-	# needed by python3-pydantic, python3-annotated-types
+	# needed by python3-pydantic, python3-annotated-types, python3-abseil-py, etc
 	if [ ! -x "${HOST_HATCHLING}" ]; then
 		missing_tools+=(hatchling)
 	fi
-	# needed by python3-typing-extensions
+	# needed by python3-typing-extensions, python3-etils
 	if [ ! -x "${HOST_FLIT}" ]; then
 		missing_tools+=(flit)
 	fi

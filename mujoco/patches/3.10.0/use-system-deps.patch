@@ -1,0 +1,130 @@
+--- a/cmake/MujocoDependencies.cmake
++++ b/cmake/MujocoDependencies.cmake
+@@ -76,6 +76,10 @@ mark_as_advanced(MUJOCO_DEP_VERSION_benchmark)
+ include(FetchContent)
+ include(FindOrFetch)
+ 
++option(MUJOCO_USE_SYSTEM_CCD "Use installed libccd package." OFF)
++option(MUJOCO_USE_SYSTEM_QHULL "Use installed Qhull package." OFF)
++option(MUJOCO_USE_SYSTEM_TINYXML2 "Use installed tinyxml2 package." OFF)
++
+ # Override the BUILD_SHARED_LIBS setting, just for building third party libs (since we always want
+ # static libraries). The ccd CMakeLists.txt doesn't expose an option to build a static ccd library,
+ # unless BUILD_SHARED_LIBS is set.
+@@ -134,9 +138,9 @@ set(QHULL_PATCH_COMMAND
+ 
+ findorfetch(
+   USE_SYSTEM_PACKAGE
+-  OFF
++  ${MUJOCO_USE_SYSTEM_QHULL}
+   PACKAGE_NAME
+-  qhull
++  Qhull
+   LIBRARY_NAME
+   qhull
+   GIT_REPO
+@@ -144,22 +148,32 @@ findorfetch(
+   GIT_TAG
+   ${MUJOCO_DEP_VERSION_qhull}
+   TARGETS
+-  qhull
++  qhullstatic_r
+   EXCLUDE_FROM_ALL
+   PATCH_COMMAND ${QHULL_PATCH_COMMAND}
+ )
++if(MUJOCO_USE_SYSTEM_QHULL AND TARGET Qhull::qhullstatic_r AND NOT TARGET qhullstatic_r)
++  add_library(qhullstatic_r INTERFACE)
++  target_link_libraries(qhullstatic_r INTERFACE Qhull::qhullstatic_r)
++  get_target_property(MUJOCO_QHULL_INCLUDE_DIRS Qhull::qhullstatic_r INTERFACE_INCLUDE_DIRECTORIES)
++  foreach(MUJOCO_QHULL_INCLUDE_DIR IN LISTS MUJOCO_QHULL_INCLUDE_DIRS)
++    target_include_directories(qhullstatic_r INTERFACE "${MUJOCO_QHULL_INCLUDE_DIR}/libqhull_r")
++  endforeach()
++endif()
+ # MuJoCo includes a file from libqhull_r which is not exported by the qhull include directories.
+ # Add it to the target.
+-target_include_directories(
+-  qhullstatic_r INTERFACE $<BUILD_INTERFACE:${qhull_SOURCE_DIR}/src/libqhull_r>
+-)
+-target_compile_options(qhullstatic_r PRIVATE ${MUJOCO_MACOS_COMPILE_OPTIONS})
+-target_link_options(qhullstatic_r PRIVATE ${MUJOCO_MACOS_LINK_OPTIONS})
++if(NOT MUJOCO_USE_SYSTEM_QHULL)
++  target_include_directories(
++    qhullstatic_r INTERFACE $<BUILD_INTERFACE:${qhull_SOURCE_DIR}/src/libqhull_r>
++  )
++  target_compile_options(qhullstatic_r PRIVATE ${MUJOCO_MACOS_COMPILE_OPTIONS})
++  target_link_options(qhullstatic_r PRIVATE ${MUJOCO_MACOS_LINK_OPTIONS})
++endif()
+ 
+ set(tinyxml2_BUILD_TESTING OFF)
+ findorfetch(
+   USE_SYSTEM_PACKAGE
+-  OFF
++  ${MUJOCO_USE_SYSTEM_TINYXML2}
+   PACKAGE_NAME
+   tinyxml2
+   LIBRARY_NAME
+@@ -172,8 +182,14 @@ findorfetch(
+   tinyxml2
+   EXCLUDE_FROM_ALL
+ )
+-target_compile_options(tinyxml2 PRIVATE ${MUJOCO_MACOS_COMPILE_OPTIONS})
+-target_link_options(tinyxml2 PRIVATE ${MUJOCO_MACOS_LINK_OPTIONS})
++if(MUJOCO_USE_SYSTEM_TINYXML2 AND TARGET tinyxml2::tinyxml2 AND NOT TARGET tinyxml2)
++  add_library(tinyxml2 INTERFACE)
++  target_link_libraries(tinyxml2 INTERFACE tinyxml2::tinyxml2)
++endif()
++if(NOT MUJOCO_USE_SYSTEM_TINYXML2)
++  target_compile_options(tinyxml2 PRIVATE ${MUJOCO_MACOS_COMPILE_OPTIONS})
++  target_link_options(tinyxml2 PRIVATE ${MUJOCO_MACOS_LINK_OPTIONS})
++endif()
+ 
+ # update cmake_minimum_required version for compatibility with newer version of cmake
+ if(NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
+@@ -215,7 +231,7 @@ if(NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
+ endif()
+ findorfetch(
+   USE_SYSTEM_PACKAGE
+-  OFF
++  ${MUJOCO_USE_SYSTEM_CCD}
+   PACKAGE_NAME
+   ccd
+   LIBRARY_NAME
+@@ -233,17 +249,23 @@ if(CMAKE_POLICY_VERSION_MINIMUM_LOCALLY_DEFINED)
+   unset(CMAKE_POLICY_VERSION_MINIMUM)
+   unset(CMAKE_POLICY_VERSION_MINIMUM_LOCALLY_DEFINED)
+ endif()
+-target_compile_options(ccd PRIVATE ${MUJOCO_MACOS_COMPILE_OPTIONS})
+-target_link_options(ccd PRIVATE ${MUJOCO_MACOS_LINK_OPTIONS})
++if(NOT MUJOCO_USE_SYSTEM_CCD)
++  target_compile_options(ccd PRIVATE ${MUJOCO_MACOS_COMPILE_OPTIONS})
++  target_link_options(ccd PRIVATE ${MUJOCO_MACOS_LINK_OPTIONS})
++endif()
+ 
+ # libCCD has an unconditional `#define _CRT_SECURE_NO_WARNINGS` on Windows.
+ # TODO(stunya): Remove this after https://github.com/danfis/libccd/pull/77 is merged.
+ if(WIN32)
+   if(MSVC)
+     # C4005 is the MSVC equivalent of -Wmacro-redefined.
+-    target_compile_options(ccd PRIVATE /wd4005)
++    if(NOT MUJOCO_USE_SYSTEM_CCD)
++      target_compile_options(ccd PRIVATE /wd4005)
++    endif()
+   else()
+-    target_compile_options(ccd PRIVATE -Wno-macro-redefined)
++    if(NOT MUJOCO_USE_SYSTEM_CCD)
++      target_compile_options(ccd PRIVATE -Wno-macro-redefined)
++    endif()
+   endif()
+ endif()
+ 
+--- a/src/engine/engine_util_errmem.c
++++ b/src/engine/engine_util_errmem.c
+@@ -197,7 +197,7 @@ static void mju_localTimeStr(char* buf, int buf_sz) {
+   struct tm timeinfo;
+   time(&rawtime);
+ 
+-#if defined(_POSIX_C_SOURCE) || defined(__APPLE__) || defined(__STDC_VERSION_TIME_H__) || defined(__EMSCRIPTEN__)
++#if defined(_POSIX_C_SOURCE) || defined(__APPLE__) || defined(__STDC_VERSION_TIME_H__) || defined(__EMSCRIPTEN__) || defined(__OHOS__)
+   localtime_r(&rawtime, &timeinfo);
+ #elif defined(_WIN32)
+   localtime_s(&timeinfo, &rawtime);
