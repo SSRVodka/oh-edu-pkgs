@@ -57,6 +57,8 @@ For native Python packages, verify exact crossenv commands:
 .ohloha/crossenv/18/aarch64/cross/bin/python3-config --ldflags
 ```
 
+If wheel metadata unexpectedly reports `0.0.0`, inspect `pyproject.toml` for `dynamic = ["version"]` and its provider. Confirm the provider is importable from the PEP 517 build side, not merely `${HOST_TOOLS_PYTHON}`, and check whether the downloaded source contains the VCS metadata the provider expects. For `setuptools_scm`, verify any `SETUPTOOLS_SCM_PRETEND_VERSION_FOR_<DIST_NAME>` override uses the normalized distribution name (uppercase, non-alphanumeric characters replaced with underscores).
+
 For target linker issues, check whether the failing command is raw `ld.lld`, a compiler driver, or a wrapper. Do not change global Python linkage to hide a missing package-local `-L` path.
 
 For host-loaded libraries such as `libclang.so`, verify that the library is for the build host, not the OHOS target, unless the failing target binary actually links it.

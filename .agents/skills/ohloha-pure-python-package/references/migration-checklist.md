@@ -54,6 +54,10 @@ The ohloha pure-python pattern normally keeps PEP 517 build isolation and passes
 
 Do not add backend packages to `pkg_deps` just because they appear in `[build-system].requires`. Add them to package metadata only if the repo's build helpers actually require that for the chosen pattern and the package fails without it.
 
+Do not reproduce wheelhouse handling or run `${PYCROSS_CROSS_PIP} install` for the package being built. Reuse the build helper and install the finished wheel into `${target_root_with_pkgname}` only through `install_current_python_wheelhouse_to_target_site_packages`.
+
+If the project declares a dynamic version, verify the built wheel filename and `METADATA` version. A `0.0.0` result commonly means the version plugin was unavailable. If build isolation is intentionally disabled, install the plugin into `${PYCROSS_BUILD_PIP}`; `${HOST_TOOLS_PYTHON}` does not supply the crossenv PEP 517 environment. VCS-based providers may additionally need an explicit archive-version override when the source has no `.git` metadata.
+
 ## Topology and Tests
 
 When adding several packages, order them from leaves to final package:

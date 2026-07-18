@@ -50,6 +50,8 @@ postbuilt_hook() {
 
 Use `--no-deps` to prevent pip from downloading runtime dependencies during cross builds. Do not use `--no-build-isolation` unless the backend must be preinstalled into the crossenv build side and the BUILD hook explicitly does that.
 
+Reuse the repository wheel helpers. Do not explicitly install the newly built package into the shared crossenv with `${PYCROSS_CROSS_PIP}`; this pollutes subsequent builds. `postbuilt_hook` must install the current wheelhouse only into the package target prefix through `install_current_python_wheelhouse_to_target_site_packages`.
+
 ## Validation
 
 At minimum run:

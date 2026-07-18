@@ -28,7 +28,7 @@ Read only the relevant section of `references/package-categories.md` after class
 
 - **Native libraries/binaries**: use Autotools/CMake/Meson helpers and target dependency paths supplied by the build system.
 - **Pure Python packages**: use `ohloha-pure-python-package`; keep build isolation by default and use `--no-deps`.
-- **Native Python packages**: use `setup_pycrossenv`, preserve `--no-binary :all:`, fix target `python3-config`/sysconfig wrappers when extension tooling selects crossenv commands, and declare target libraries explicitly.
+- **Native Python packages**: read the full lifecycle in `references/package-categories.md`; keep non-Rust backend/dependency preparation between `setup_pycrossenv` and `build_python_cross_package_active`, always destroy crossenv, and install the resulting wheelhouse in `postbuilt_hook`.
 - **Rust-Python packages**: use Rust/PyO3 helpers; do not put rustup/cargo setup or host tool installs in package `BUILD`.
 
 ## Common Checks
@@ -53,6 +53,8 @@ For faster debugging, direct `builder.sh` is valid only with dependencies in top
 ## Non-Negotiables
 
 - Do not install random host tools in package `BUILD` files.
+- Reuse the existing Python wheel/crossenv helpers; do not duplicate their implementation in package hooks.
+- Do not explicitly install a newly cross-compiled package into the shared crossenv with `${PYCROSS_CROSS_PIP}`. Package output belongs under `${target_root_with_pkgname}` via the wheelhouse installation helper.
 - Do not remove `--no-binary :all:` merely to avoid source builds.
 - Do not add `--no-build-isolation` unless backend requirements are intentionally installed into the crossenv build side.
 - Do not remove or weaken `-lpython${PY_VERSION}` from Python crossenv linkage.

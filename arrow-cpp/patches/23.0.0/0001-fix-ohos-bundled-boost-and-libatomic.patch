@@ -1,0 +1,44 @@
+diff --git a/cpp/cmake_modules/ThirdpartyToolchain.cmake b/cpp/cmake_modules/ThirdpartyToolchain.cmake
+index 49abbbb..ea05dfd 100644
+--- a/cpp/cmake_modules/ThirdpartyToolchain.cmake
++++ b/cpp/cmake_modules/ThirdpartyToolchain.cmake
+@@ -1083,7 +1083,7 @@ macro(build_boost)
+     set(ARROW_BOOST_NEED_MULTIPRECISION FALSE)
+   endif()
+   if(ARROW_ENABLE_THREADING)
+-    if(ARROW_WITH_THRIFT OR (ARROW_FLIGHT_SQL_ODBC AND MSVC))
++    if((ARROW_WITH_THRIFT OR (ARROW_FLIGHT_SQL_ODBC AND MSVC)) AND NOT OHOS)
+       list(APPEND BOOST_INCLUDE_LIBRARIES locale)
+     endif()
+     if(ARROW_BOOST_NEED_MULTIPRECISION)
+@@ -1108,7 +1108,7 @@ macro(build_boost)
+     list(APPEND BOOST_EXCLUDE_LIBRARIES uuid)
+   endif()
+   set(BOOST_SKIP_INSTALL_RULES ON)
+-  if(NOT ARROW_ENABLE_THREADING)
++  if(NOT ARROW_ENABLE_THREADING OR OHOS)
+     set(BOOST_UUID_LINK_LIBATOMIC OFF)
+   endif()
+   if(MSVC)
+@@ -1165,6 +1165,6 @@ macro(build_boost)
+   endif()
+   if(ARROW_WITH_THRIFT)
+-    if(ARROW_ENABLE_THREADING)
++    if(ARROW_ENABLE_THREADING AND NOT OHOS)
+       add_library(arrow::Boost::locale ALIAS boost_locale)
+     else()
+       # Apache Parquet depends on Apache Thrift.
+diff --git a/cpp/src/arrow/CMakeLists.txt b/cpp/src/arrow/CMakeLists.txt
+index f5f3cce..7d0f92f 100644
+--- a/cpp/src/arrow/CMakeLists.txt
++++ b/cpp/src/arrow/CMakeLists.txt
+@@ -173,7 +173,8 @@ list(APPEND ARROW_STATIC_INSTALL_INTERFACE_LIBS ${ARROW_SYSTEM_LINK_LIBS})
+ 
+ # Need -latomic on Raspbian.
+ # See also: https://issues.apache.org/jira/browse/ARROW-12860
+-if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux" AND ${CMAKE_SYSTEM_PROCESSOR} MATCHES "armv7")
++if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux" AND ${CMAKE_SYSTEM_PROCESSOR} MATCHES "armv7"
++   AND NOT OHOS)
+   string(APPEND ARROW_PC_LIBS_PRIVATE " -latomic")
+   list(APPEND ARROW_SHARED_INSTALL_INTERFACE_LIBS "atomic")
+   list(APPEND ARROW_STATIC_INSTALL_INTERFACE_LIBS "atomic")

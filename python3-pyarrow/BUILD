@@ -2,11 +2,11 @@
 set -Eeuo pipefail
 
 setup() {
-pkg_version="18.0.0"
+pkg_version="23.0.0"
 pkg_name="python3-pyarrow"
-pkg_deps="python3>3.7,python3-numpy>=2,arrow-cpp==18.0.0"
-pkg_build_deps="python3>3.7,python3-numpy>=2,arrow-cpp==18.0.0"
-pkg_source_url="https://github.com/apache/arrow/archive/refs/tags/apache-arrow-18.0.0.tar.gz"
+pkg_deps="python3>3.7,python3-numpy>=2,arrow-cpp==23.0.0"
+pkg_build_deps="python3>3.7,python3-numpy>=2,arrow-cpp==23.0.0"
+pkg_source_url="https://github.com/apache/arrow/archive/refs/tags/apache-arrow-23.0.0.tar.gz"
 pkg_release_url=""
 pkg_license="Apache-2.0"
 pkg_support_archs="x86_64,aarch64,arm"
@@ -66,6 +66,8 @@ prebuilt_patch_once_hook() {
 
 custom_build() {
 	setup_pycrossenv
+	"${PYCROSS_BUILD_PIP}" install "setuptools_scm[toml]>=8" || { destroy_pycrossenv; return 1; }
+	export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_PYARROW="${pkg_version}"
 
 	# Arrow C++ built by arrow-cpp ohloha package (with Filesystem/JSON/Compute)
 	local arrow_prefix=$(get_pkg_dst_dir arrow-cpp)
@@ -76,9 +78,9 @@ custom_build() {
 	export PYARROW_BUNDLE_ARROW_CPP=1
 
 	# Enable features that arrow-cpp provides
-	export PYARROW_WITH_PARQUET=0
-	export PYARROW_WITH_DATASET=0
-	export PYARROW_WITH_ACERO=0
+	export PYARROW_WITH_PARQUET=1
+	export PYARROW_WITH_DATASET=1
+	export PYARROW_WITH_ACERO=1
 	export PYARROW_WITH_ORC=0
 	export PYARROW_WITH_GANDIVA=0
 	export PYARROW_WITH_PLASMA=0

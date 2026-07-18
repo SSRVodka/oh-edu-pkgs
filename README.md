@@ -83,7 +83,7 @@ AI 友好：提供了 `AGENTS.md`, `DESIGN.md` 文档，以及迁移包的 skill
 >
 >   你需要使用时手动指定 `pkg_build_meson_cross_file` 为修改后的 `*.meson` 文件，例如 `${MESON_CROSS_FILE_BASE}`；
 >
-> - `pure-python` 构建类型的库：进入预先准备的 `crossenv`，使用 `pip install --no-binary :all:` 的 prefix 构建；
+> - `pure-python` 构建类型的库：进入预先准备的 `crossenv`，从源码构建 wheel，并将 wheel 安装到目标 Python 包目录；
 >
 > - `pyo3-rust` 构建类型的库：进入或复用 Python `crossenv`，设置 PyO3/Rust/Cargo/cc-rs 交叉编译变量，并通过仓库私有 host tool `${HOST_MATURIN}` 构建 maturin wheel；
 >
@@ -98,13 +98,30 @@ AI 友好：提供了 `AGENTS.md`, `DESIGN.md` 文档，以及迁移包的 skill
 > - `cmake` 类型：`grpc/BUILD`、`zstd/BUILD` 等；
 > - `autotools` 类型：`util-linux/BUILD`、`libncursesw/BUILD` 等；
 > - `pure-python` 类型：`python3-build`、`python3-setuptools` 等；
-> - `pyo3-rust` 类型：`python3-tokenizers`、`python3-safetensors` 等；
+> - `pyo3-rust` 类型：`python3-tokenizers`、`python3-safetensors` 等。
+
+#### 非 Rust native Python 包
+
+包含 C/C++ 扩展、但不涉及 Rust/PyO3 的 Python 包，通常使用 `pkg_build_type="custom"`，因为 setuptools、Cython、Meson、scikit-build、SWIG 等后端的依赖参数差异较大。推荐流程为：
+
+1. `setup_pycrossenv`：进入交叉 Python 环境，并设置目标 Python/NumPy 的基础编译和链接参数；
+2. 在 `custom_build` 中解析 native 依赖路径，追加包专用的 `CFLAGS`、`LDFLAGS`、pkg-config、CMake 或后端变量；
+3. 如需 `--no-build-isolation`，先使用 `${PYCROSS_BUILD_PIP}` 安装全部 PEP 517 backend/plugin；仅安装到 `${HOST_TOOLS_PYTHON}` 无效；
+4. 调用 `build_python_cross_package_active -v --no-deps --no-binary :all: ...` 从源码生成 wheel；
+5. 无论构建成功还是失败，都调用 `destroy_pycrossenv` 退出环境并释放锁；
+6. 在 `postbuilt_hook` 中调用 `install_current_python_wheelhouse_to_target_site_packages`，把当前 wheelhouse 安装到包输出目录。
+
+应优先复用现有 helper，不要在单个 `BUILD` 中重复实现 wheel 目录管理、归档或安装逻辑。如果进入 crossenv 后不需要额外准备，可直接使用 `build_python_cross_package ...`；它已经封装 `setup_pycrossenv`、active build 和 cleanup，不要再在外层重复进入 crossenv。
+
+交叉编译完成后，禁止在包 hook 中显式使用 `${PYCROSS_CROSS_PIP}` 把新生成的包安装回共享 crossenv，例如不要执行 `${PYCROSS_CROSS_PIP} install --force-reinstall --no-deps --no-index --find-links "$wheel_dir" "xxx==${pkg_version}"`。这会把当前包状态泄漏给后续构建。最终包只能通过 `postbuilt_hook` 中的 `install_current_python_wheelhouse_to_target_site_packages` 安装到 `${target_root_with_pkgname}`。完整模板和注意事项见 `.agents/skills/ohloha-package-migration/references/package-categories.md`。
 
 ### 编译时注意事项
 
 如需配置编译目标架构，调用 `builder.sh` 时指定 `--cpu` 参数（可选 `aarch64/arm/x86_64`）即可，或者请参考注释修改 `setup2.sh` 的 `OHOS_CPU` 和 `OHOS_ARCH` 定义；
 
 编写 `BUILD` 时，`setup()` 应只填写静态元数据和不依赖构建现场的默认值。不要在 `setup()` 中调用 `get_pkg_dst_dir`，也不要读取 `HOST_PYTHON_DIST`、`NUMPY*_LIBROOT`、`target_root_*`、`CFLAGS/LDFLAGS` 等运行态变量来拼动态 flags。依赖路径、Python/numpy include/lib 路径、根据当前 arch/workdir 计算出的 CMake/autotools/meson flags，应放在 `custom_build`、`post_configure_hook` 等 build 阶段 hook 中设置。
+
+#### Python 构建环境
 
 Python crossenv 运行目录由 `setup2.sh` 管理在 `.ohloha/crossenv/<sdk-api>/<cpu>/`。BUILD 中如需引用交叉 Python 环境，应使用 `PY_CROSS_ROOT`、`HOST_SITE_PKGS`、`PYCROSS_CROSS_PYTHON`、`PYCROSS_CROSS_PIP`、`PYCROSS_BUILD_PIP`、`PYPKG_OUTPUT_WHEEL_DIR` 等变量，不要硬编码旧的 `crossenv_<cpu>` 路径。通用 Python helper 会先构建 wheel，归档到 `dist.wheels/`，再从本地 wheel 安装到 crossenv。CPython 交叉编译所需的 build-python 位于 `.ohloha/native/build-python`，根目录旧 `build-python.dist` 仅视为 legacy 生成物。
 
