@@ -1208,10 +1208,18 @@ setup_pyo3_rust_cross_env() {
 		return 1
 	fi
 
-	local rust_target cargo_key cc_env_key ohos_target cc_bin cxx_bin cxx_inc python_prefix
+	local rust_target rust_toolchain cargo_key cc_env_key ohos_target cc_bin cxx_bin cxx_inc python_prefix
 	rust_target=$(ohos_rust_target_for_cpu "${OHOS_CPU}") || rc=$?
+	if [ "$rc" -eq 0 ] && command -v rustup >/dev/null 2>&1; then
+		# Respect a package-local rust-toolchain file.  Querying outside the source
+		# tree would install the target for the host default toolchain instead.
+		rust_toolchain=$(
+			pushd "${current_source_root}" >/dev/null || exit 1
+			rustup show active-toolchain | awk '{print $1}'
+		) || rc=$?
+	fi
 	if [ "$rc" -eq 0 ]; then
-		ensure_pyo3_rust_target "${rust_target}" || rc=$?
+		ensure_pyo3_rust_target "${rust_target}" "${rust_toolchain:-}" || rc=$?
 	fi
 	if [ "$rc" -ne 0 ]; then
 		destroy_pyo3_rust_cross_env || true
@@ -1263,6 +1271,8 @@ setup_pyo3_rust_cross_env() {
 
 ensure_pyo3_rust_target() {
 	local rust_target="${1:-}"
+	local rust_toolchain="${2:-}"
+	local -a rustup_args=(target add "${rust_target}")
 	[ -n "${rust_target}" ] || { error "empty Rust target"; return 1; }
 	if ! command -v rustup >/dev/null 2>&1; then
 		if rustc --print target-list 2>/dev/null | grep -qx "${rust_target}"; then
@@ -1271,7 +1281,10 @@ ensure_pyo3_rust_target() {
 		error "rustup not found and rust target cannot be verified: ${rust_target}"
 		return 1
 	fi
-	with_ohloha_lock "rust-target-${rust_target}" rustup target add "${rust_target}"
+	if [ -n "${rust_toolchain}" ]; then
+		rustup_args+=(--toolchain "${rust_toolchain}")
+	fi
+	with_ohloha_lock "rust-target-${rust_toolchain:-default}-${rust_target}" rustup "${rustup_args[@]}"
 }
 
 destroy_pyo3_rust_cross_env() {

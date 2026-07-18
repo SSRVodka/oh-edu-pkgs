@@ -19,3 +19,5 @@ apt install -y openjdk-21-jdk libc6-dev libc++-12-dev libc++abi-12-dev clang llv
 # PyO3/rust packages deps
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 . "$HOME/.cargo/env"
+# python3-rerun-sdk -> wasm-opt (host) needed
+apt install -y binaryen
