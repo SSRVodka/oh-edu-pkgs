@@ -66,7 +66,7 @@ prebuilt_patch_once_hook() {
 
 custom_build() {
 	setup_pycrossenv
-	"${PYCROSS_BUILD_PIP}" install "setuptools_scm[toml]>=8" || { destroy_pycrossenv; return 1; }
+	"${PYCROSS_BUILD_PIP}" install "setuptools_scm[toml]>=8" "cython>=3.1" || { destroy_pycrossenv; return 1; }
 	export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_PYARROW="${pkg_version}"
 
 	# Arrow C++ built by arrow-cpp ohloha package (with Filesystem/JSON/Compute)

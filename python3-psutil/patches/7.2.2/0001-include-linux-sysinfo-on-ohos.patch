@@ -1,16 +1,3 @@
---- a/psutil/arch/linux/mem.c
-+++ b/psutil/arch/linux/mem.c
-@@ -5,6 +5,9 @@
-  */
- 
- #include <Python.h>
- #include <sys/sysinfo.h>
-+#ifdef __OPENHARMONY__
-+#include <linux/sysinfo.h>
-+#endif
- 
- #include "../../arch/all/init.h"
- 
 --- a/psutil/arch/posix/init.h
 +++ b/psutil/arch/posix/init.h
 @@ -14,7 +14,7 @@
