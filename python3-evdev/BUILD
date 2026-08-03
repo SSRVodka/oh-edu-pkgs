@@ -61,6 +61,8 @@ custom_build() {
 	local build_rc=0
 	setup_pycrossenv || return 1
 
+	"${PYCROSS_BUILD_PIP}" install "setuptools>=61.0" || build_rc=$?
+
 	# evdev generates ecodes.c from Linux kernel headers at build time via
 	# genecodes.py. Point build_ecodes --evdev-headers to the OH SDK sysroot
 	# headers. Some newer keycode macros are missing from the SDK header; patch

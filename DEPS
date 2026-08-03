@@ -1,5 +1,5 @@
 # NOTE: this file only support Ubuntu < 26.04
-apt install -y lsb-release wget software-properties-common gnupg curl zstd
+apt install -y lsb-release wget software-properties-common gnupg curl zstd python3-venv
 apt install -y build-essential file patchelf bison flex nasm texinfo perl automake autoconf autopoint libtool libtool-bin m4 po4a
 # python deps
 # Change lzma-dev to liblzma-dev, libncurses5-dev to libncurses-dev, libreadline6-dev to libreadline-dev in ubuntu >= 26.04
@@ -16,6 +16,7 @@ apt install -y glslang-tools
 apt install -y gperf
 # openjdk deps: use same jdk version as bootstrap JDK; no libstdc++-12-dev to avoid using default glibc
 apt install -y openjdk-21-jdk libc6-dev libc++-12-dev libc++abi-12-dev clang llvm lldb lld
+apt install -y 
 # PyO3/rust packages deps
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 . "$HOME/.cargo/env"
