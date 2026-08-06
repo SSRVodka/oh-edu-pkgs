@@ -396,10 +396,13 @@ if (NOT DEFINED SSRVODKA_APPEND_C_PREPROCESSOR_FLAGS)
 endif()
 if (SSRVODKA_APPEND_C_PREPROCESSOR_FLAGS)
   separate_arguments(_extra_cpreprocessorflags NATIVE_COMMAND "${SSRVODKA_APPEND_C_PREPROCESSOR_FLAGS}")
-  list(APPEND SSRVODKA_CPP_FLAGS ${_extra_cpreprocessorflags})
+  foreach(_flag IN LISTS _extra_cpreprocessorflags)
+    # Remove leading -D if present
+    string(REGEX REPLACE "^-D" "" _clean_flag "${_flag}")
+    list(APPEND SSRVODKA_CPP_FLAGS "${_clean_flag}")
+  endforeach()
+  add_compile_definitions(${SSRVODKA_CPP_FLAGS})
 endif()
-string(REPLACE ";" " " SSRVODKA_CPP_FLAGS "${SSRVODKA_CPP_FLAGS}")
-add_compile_definitions(${SSRVODKA_CPP_FLAGS})
 
 # set the cmake global asmflags
 set(CMAKE_ASM_FLAGS "" CACHE STRING "Flags for all build types.")

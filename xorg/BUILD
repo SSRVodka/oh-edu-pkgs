@@ -345,6 +345,10 @@ custom_build() {
 	readline_prefix=$(get_pkg_dst_dir libreadline) || return 1
 	CFLAGS="-I${freetype_prefix}/include/freetype2 -I${ncursesw_prefix}/include/ncursesw -I${readline_prefix}/include/readline ${CFLAGS}"
 	CXXFLAGS=$CFLAGS
+	# setup native build flags for libXt utils like makestrs (on host)
+	export CC_FOR_BUILD="clang"
+	export CFLAGS_FOR_BUILD="-O2"
+	export CPPFLAGS_FOR_BUILD=""
 	_xlibs_deps="$pkg_name $(get_pkg_names_from_deps $pkg_build_deps)"
 	for pkg in $(cat $LIBNAME_LIST); do
 		info "building xorg lib component: $pkg"
@@ -387,7 +391,9 @@ custom_build() {
 
 # Hook: called after leaving build dir (staging area ${target_root_with_pkgname} is generated)
 postbuilt_hook() {
-	:
+	unset CC_FOR_BUILD
+	unset CFLAGS_FOR_BUILD
+	unset CPPFLAGS_FOR_BUILD
 }
 
 ################ self-defined functions (local) goes below ################
